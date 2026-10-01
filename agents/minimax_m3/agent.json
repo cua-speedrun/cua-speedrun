@@ -1,0 +1,7 @@
+{
+  "description": "MiniMax M3 on the MiniMax platform's Anthropic-compatible endpoint, ported from OSWorld mm_agents/m3: <tool_call> computer actions, 0-1000 relative coordinates, and chunked screenshot truncation.",
+  "required_environment_variables": [
+    "MINIMAX_API_KEY"
+  ],
+  "gpu": null
+}

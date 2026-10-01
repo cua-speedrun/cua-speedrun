@@ -1,0 +1,7 @@
+{
+  "description": "Gemini 3 Flash Preview via the Gemini Interactions API computer_use desktop tool, with preview-model pricing defaults for cost tracking.",
+  "required_environment_variables": [
+    "GEMINI_API_KEY"
+  ],
+  "gpu": null
+}

@@ -1,0 +1,21 @@
+{% extends "layout.html" %}
+{% block title %}Methodology · cua-speedrun{% endblock %}
+{% block content %}
+<h1>Methodology</h1>
+<p class="sub">The rules that keep the numbers honest.</p>
+
+<h2>What is measured</h2>
+<p>How fast a computer-use agent finishes real desktop tasks, at a fixed success bar. Every run uses a real environment and injects real input events. Each benchmark supplies its own verifier, which may use programmatic checks or a model-based judge.</p>
+
+<h2>One clock</h2>
+<p>All timed events are stamped by a single monotonic clock owned by the gateway that serves the agent its observations, co-located with the environment. The clock starts when the run is armed, immediately before the agent receives the task, so there is no free thinking time. It stops when the agent declares done. A fixed grace period later, the checker runs exactly once. The success bar and failure-charging rule are frozen into the run before it starts.</p>
+
+<h2>The agent's world</h2>
+<p>An agent reaches the environment through three operations: observe, step, done. There is no reset, no snapshot, no shell. Exploring parallel futures on copies of the machine is impossible at the interface, not merely forbidden by rule. The agent sandbox has outbound internet access, so a submission may use external APIs, a model started by <code>init.py</code>, both, or neither. Verifier, rubric, and source-answer files are removed from the interactive guest after setup and before the task is revealed; a failed removal aborts the run.</p>
+
+<h2>Evaluation contracts</h2>
+<p>Before a run is queued, the selected track and benchmark resolve to an immutable, content-addressed execution plan. It includes benchmark and harness content hashes, hardware, network policy, eval algorithm, agents per evaluation, seed policy, scoring, and server config. Its hash is part of the season key, so changing any comparison-relevant value opens a new season automatically. A submission may add isolated parallel evaluation replicas; that changes evaluator throughput, is recorded with the result, and does not split the season. Entries with fewer runs than the multi-run threshold are marked provisional.</p>
+
+<h2>Auditability</h2>
+<p>Scoring is a pure function over run logs. Raw logs are downloadable for every published entry, and every leaderboard number can be recomputed from them.</p>
+{% endblock %}

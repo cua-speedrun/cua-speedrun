@@ -1,0 +1,69 @@
+schema_version: 1
+replacements:
+- path: scripts/setup_dhis2.sh
+  old: |
+    DEMO_DB_URL="https://databases.dhis2.org/sierra-leone/2.40/dhis2-db-sierra-leone.sql.gz"
+    DEMO_DB_ALT_URL="https://databases.dhis2.org/sierra-leone/2.40.11/dhis2-db-sierra-leone.sql.gz"
+  new: |
+    # Keep the database migration history compatible with the pinned app.
+    DEMO_DB_URL="https://databases.dhis2.org/sierra-leone/2.40.11/dhis2-db-sierra-leone.sql.gz"
+    DEMO_DB_SHA256="fb30c851d125f4fdbef2a68acba440fb90893ba181f9b1cfb3a1a4be6742f7b2"
+- path: scripts/setup_dhis2.sh
+  old: |
+    # Try primary URL first, then alternative
+    if ! wget -q --show-progress -O "$DEMO_DB_FILE" "$DEMO_DB_URL" 2>/dev/null; then
+        echo "Primary URL failed, trying alternative..."
+        if ! wget -q --show-progress -O "$DEMO_DB_FILE" "$DEMO_DB_ALT_URL" 2>/dev/null; then
+            echo "ERROR: Could not download Sierra Leone demo database"
+            echo "Tried: $DEMO_DB_URL"
+            echo "Tried: $DEMO_DB_ALT_URL"
+            echo "DHIS2 will start with an empty database."
+            DEMO_DB_FILE=""
+        fi
+    fi
+  new: |
+    if ! curl --fail --location --retry 3 --connect-timeout 20 --max-time 300 \
+        --output "$DEMO_DB_FILE" "$DEMO_DB_URL"; then
+        echo "ERROR: Could not download the pinned Sierra Leone demo database"
+        exit 1
+    fi
+    if ! printf '%s  %s\n' "$DEMO_DB_SHA256" "$DEMO_DB_FILE" | sha256sum --check -; then
+        echo "ERROR: Sierra Leone demo database checksum mismatch"
+        exit 1
+    fi
+- path: scripts/setup_dhis2.sh
+  old: |2
+        docker exec dhis2-db bash -c "gunzip -c /tmp/dhis2-db-sierra-leone.sql.gz | psql -U dhis -d dhis2 -q" 2>&1 | tail -5
+  new: |2
+        if ! (set -o pipefail; docker exec dhis2-db bash -o pipefail -c \
+            "gunzip -c /tmp/dhis2-db-sierra-leone.sql.gz | psql -U dhis -d dhis2 -q -v ON_ERROR_STOP=1" \
+            2>&1 | tee /tmp/dhis2_import.log | tail -5); then
+            echo "ERROR: Sierra Leone demo database import failed"
+            exit 1
+        fi
+- path: scripts/setup_dhis2.sh
+  old: '    echo "Organisation units: $OU_COUNT"'
+  new: |2
+        echo "Organisation units: $OU_COUNT"
+        if ! [ "${OU_COUNT:-0}" -gt 0 ]; then
+            echo "ERROR: Imported database contains no organisation units"
+            exit 1
+        fi
+- path: scripts/setup_dhis2.sh
+  old: 'wait_for_dhis2 900'
+  new: |
+    if ! wait_for_dhis2 900; then
+        docker-compose logs --tail=80 dhis2
+        echo "ERROR: DHIS2 application is not ready"
+        exit 1
+    fi
+- path: tasks/rmncah_scorecard_dashboard/setup_task.sh
+  old: |
+    else
+        su - ga -c "DISPLAY=:1 firefox '$DHIS2_URL' > /dev/null 2>&1 &" 2>/dev/null || true
+        sleep 4
+    fi
+  new: |
+    fi
+    # The environment hook already opened DHIS2 in the running browser.
+    # A second process with a different D-Bus session can hit its profile lock.

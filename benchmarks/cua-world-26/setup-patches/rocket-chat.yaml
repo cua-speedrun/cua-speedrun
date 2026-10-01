@@ -1,0 +1,25 @@
+schema_version: 1
+replacements:
+- path: scripts/install_rocket_chat.sh
+  old: 'docker pull docker.io/mongodb/mongodb-community-server:8.2-ubi8 || true'
+  new: 'docker pull docker.io/library/mongo:8.0.30'
+- path: scripts/setup_rocket_chat.sh
+  old: 'cp "$COMPOSE_FILE" "$ROCKETCHAT_DIR/docker-compose.yml"'
+  new: |
+    # MongoDB SERVER-125742: 8.0.30 supports Linux kernels 7.0.14+.
+    # Rocket.Chat 8 supports MongoDB 8.0; the application and seed are unchanged.
+    sed 's|docker.io/mongodb/mongodb-community-server:8.2-ubi8|docker.io/library/mongo:8.0.30|' \
+      "$COMPOSE_FILE" > "$ROCKETCHAT_DIR/docker-compose.yml"
+- path: scripts/task_utils.sh
+  old: |2-
+      if has_command epiphany-browser; then
+        browser_cmd="epiphany-browser"
+      elif has_command epiphany; then
+        browser_cmd="epiphany"
+      else
+        browser_cmd="firefox"
+      fi
+  new: '  browser_cmd="firefox"'
+- path: scripts/task_utils.sh
+  old: '      navigate_to_url "$url"'
+  new: '      # The native browser launch above already opens the exact URL.'

@@ -1,0 +1,19 @@
+{
+  "schema_version": 1,
+  "provenance_schema_version": 2,
+  "recipe": "cua-speedrun-mypcbench-qcow2@1",
+  "official_source": {
+    "repository": "https://huggingface.co/datasets/ljang0/mypcbench-qemu-baseline",
+    "revision": "eeefdb7ca4686b8175ced740b0d1abb986021ec0",
+    "url": "https://huggingface.co/datasets/ljang0/mypcbench-qemu-baseline/resolve/eeefdb7ca4686b8175ced740b0d1abb986021ec0/michael_scott.qcow2",
+    "image_sha256": "340873b9092766e2694aa2940dadcd93de30664151295570bf818496ca3d20e2",
+    "image_version": "daily-bake-2026-09-16",
+    "note": "Upstream rebakes and re-uploads michael_scott.qcow2 daily (~10:00 UTC) to keep date-sensitive seeded state fresh; VERSION.json/SHA256SUMS may lag those uploads, so this contract pins the revision's authoritative LFS sha256. The scheduled promotion moves this pin only after a changed image is built and validated on a fresh Modal desktop.",
+    "size_bytes": 5118689280
+  },
+  "guest": {
+    "ssh_user": "user",
+    "ssh_password": "password",
+    "control_api_port": 5000
+  }
+}

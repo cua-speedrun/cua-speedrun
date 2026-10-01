@@ -1,0 +1,42 @@
+schema_version: 1
+runner: slurm
+name: cpu-array
+description: One CPU-only compute replica per single-element Slurm array job.
+submit_mode: array
+
+job:
+  overhead_minutes: 30
+  start_timeout_minutes: 120
+  cpus_per_replica:
+    default: 8
+  mem_per_replica:
+    default: 16G
+  gpu_types: {}
+
+# Add partition, account, or QoS options for your cluster.
+submit_command:
+  - sbatch
+  - --parsable
+  - --no-requeue
+  - --array=1-1%1
+  - --job-name=cua-${evaluation_id}-${replica}
+  - --time=${job_time}
+  - --cpus-per-task=${cpus}
+  - --mem=${mem}
+  - --output=${log_path}
+step_command:
+  - srun
+  - --jobid=${job_id}
+  - --overlap
+  - --exact
+  - --nodes=1
+  - --ntasks=1
+  - --cpus-per-task=1
+  - --chdir=${submission_dir}
+cancel_command:
+  - scancel
+  - ${job_id}
+script: |
+  #!/usr/bin/env bash
+  set -euo pipefail
+  exec ${worker_command}

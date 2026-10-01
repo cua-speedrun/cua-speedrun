@@ -1,0 +1,17 @@
+{% extends "layout.html" %}
+{% block title %}{{ entry.entry_name }} · cua-speedrun{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><h1>{{ entry.entry_name }}</h1><p>Published {{ entry.published_at.strftime("%Y-%m-%d %H:%M") }} UTC · {{ result.track_name }}</p></div>
+  <div class="page-actions"><a class="btn secondary" href="/?track={{ result.track_name | urlencode }}&amp;season={{ entry.season_key | urlencode }}">Frontier</a>{% if nearest_peer %}<a class="btn" href="/compare?entry={{ entry.id }}&amp;entry={{ nearest_peer.entry_id }}">Compare</a>{% endif %}</div>
+</header>
+{% set result_visibility = "published" %}{% include "_result_inspector.html" %}
+
+<div class="section-bar"><div><h2>Task results</h2><p>Exact measured task instances and seeds.</p></div></div>
+<table class="instrument result-table">
+  <thead><tr><th>Task</th><th>Seed</th><th>Status</th><th class="num">Total</th><th class="num">Agent</th><th class="num">Environment</th><th class="num">Steps</th><th class="num">Cost</th></tr></thead>
+  <tbody>{% for row in rows %}<tr><td><strong>{{ row.task_id }}</strong></td><td class="fingerprint">{{ row.seed }}</td><td>{% if row.passed %}<span class="chip pass">Passed</span>{% else %}<span class="chip fail">Failed</span>{% endif %}</td><td class="num">{% if row.task_time_sec is not none %}{{ "%.2f" | format(row.task_time_sec) }}s{% else %}—{% endif %}</td><td class="num">{% if row.agent_time_sec is not none %}{{ "%.2f" | format(row.agent_time_sec) }}s{% else %}—{% endif %}</td><td class="num">{% if row.env_time_sec is not none %}{{ "%.2f" | format(row.env_time_sec) }}s{% else %}—{% endif %}</td><td class="num">{{ row.num_steps if row.num_steps is not none else "—" }}</td><td class="num">{% if row.cost_usd is not none %}${{ "%.4f" | format(row.cost_usd) }}{% else %}—{% endif %}</td></tr>{% endfor %}</tbody>
+</table>
+
+<section class="audit-panel"><div><h2>Run evidence</h2><p>Download the stored logs used to compute this result.</p></div><a class="btn secondary" href="/entries/{{ entry.id }}/logs.zip">Download logs</a></section>
+{% endblock %}

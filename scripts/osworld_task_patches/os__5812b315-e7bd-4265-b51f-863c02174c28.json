@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_name": "os__5812b315-e7bd-4265-b51f-863c02174c28",
+  "operations": [
+    {
+      "op": "replace",
+      "index": 0,
+      "value": {
+        "type": "execute",
+        "parameters": {
+          "command": "echo {CLIENT_PASSWORD} | sudo -S mkdir -p /home/test1",
+          "shell": true
+        }
+      }
+    }
+  ]
+}

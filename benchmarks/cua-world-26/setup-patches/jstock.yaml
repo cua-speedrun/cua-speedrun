@@ -1,0 +1,131 @@
+schema_version: 1
+replacements:
+- path: tasks/quarterly_portfolio_rebalance/setup_task.sh
+  old: "\n\"Date\",\"Amount\",\"Comment\"\n"
+  new: "\n\"Date\",\"Cash\",\"Comment\"\n"
+- path: tasks/quarterly_portfolio_rebalance/setup_task.sh
+  old: '"Code","Symbol","Date","Amount","Comment"'
+  new: '"Date","Code","Symbol","Dividend","Comment"'
+- path: tasks/quarterly_portfolio_rebalance/setup_task.sh
+  old: '"Code","Symbol","Date","Units","Selling Price","Purchase Price","Selling Value","Purchase Value","Gain/Loss Price","Gain/Loss Value","Gain/Loss %","Broker","Clearing Fee","Stamp Duty","Net Selling Value","Net Gain/Loss Value","Net Gain/Loss %","Comment"'
+  new: '"Code","Symbol","Purchase Date","Date","Units","Selling Price","Purchase Price","Selling Value","Purchase Value","Purchase Broker","Purchase Clearing Fee","Purchase Stamp Duty","Gain/Loss Price","Gain/Loss Value","Gain/Loss %","Broker","Clearing Fee","Stamp Duty","Net Selling Value","Net Gain/Loss Value","Net Gain/Loss %","Comment"'
+- path: tasks/quarterly_portfolio_rebalance/setup_task.sh
+  old: 'echo "  Deposit: $100K initial funding"'
+  new: "echo '  Deposit: $100K initial funding'"
+- path: tasks/quarterly_portfolio_rebalance/setup_task.sh
+  old: 'XAUTHORITY=/run/user/1000/gdm/Xauthority '
+  new: ''
+  count: 7
+- path: scripts/setup_jstock.sh
+  old: "export XAUTHORITY=/run/user/1000/gdm/Xauthority\n"
+  new: "# Honor the session XAUTHORITY, or Xlib's per-user default.\n"
+- path: scripts/setup_jstock.sh
+  old: 'XAUTHORITY=/run/user/1000/gdm/Xauthority '
+  new: ''
+  count: 7
+- path: scripts/setup_jstock.sh
+  old: |2
+        # Close JStock gracefully so it saves its config
+        su - ga -c "DISPLAY=:1 xdotool key alt+F4" 2>/dev/null || true
+        sleep 2
+
+        # If a save-on-exit dialog appears, press Enter to confirm
+        su - ga -c "DISPLAY=:1 xdotool key Return" 2>/dev/null || true
+        sleep 8
+
+        # Force kill if still running
+        pkill -f "jstock.jar" 2>/dev/null || true
+        sleep 3
+  new: |2
+        # Linux saves native options on window disposal, not on SIGTERM.
+        # Target exact native window titles; keyboard focus is not a contract.
+        for ((attempt=0; attempt<60; attempt++)); do
+            if ! pgrep -u ga -f 'jstock[.]jar' > /dev/null; then
+                break
+            fi
+            su - ga -c "DISPLAY=:1 wmctrl -F -c 'JStock News'" 2>/dev/null || true
+            su - ga -c "DISPLAY=:1 wmctrl -F -c 'System Tray Not Supported'" 2>/dev/null || true
+            su - ga -c "DISPLAY=:1 wmctrl -F -c 'JStock - Free Stock Market Software'" 2>/dev/null || true
+            sleep 1
+        done
+        if pgrep -u ga -f 'jstock[.]jar' > /dev/null; then
+            echo "ERROR: JStock did not exit normally during warm-up"
+            exit 1
+        fi
+        if [ ! -s /home/ga/.jstock/1.0.7/config/options.xml ]; then
+            echo "ERROR: JStock did not save native options during warm-up"
+            exit 1
+        fi
+        echo "JStock exited normally and saved native options"
+- path: scripts/setup_jstock.sh
+  old: "\n\"Date\",\"Amount\",\"Comment\"\n"
+  new: "\n\"Date\",\"Cash\",\"Comment\"\n"
+- path: scripts/setup_jstock.sh
+  old: '"Code","Symbol","Date","Amount","Comment"'
+  new: '"Date","Code","Symbol","Dividend","Comment"'
+- path: scripts/setup_jstock.sh
+  old: '"Code","Symbol","Date","Units","Selling Price","Purchase Price","Selling Value","Purchase Value","Gain/Loss Price","Gain/Loss Value","Gain/Loss %","Broker","Clearing Fee","Stamp Duty","Net Selling Value","Net Gain/Loss Value","Net Gain/Loss %","Comment"'
+  new: '"Code","Symbol","Purchase Date","Date","Units","Selling Price","Purchase Price","Selling Value","Purchase Value","Purchase Broker","Purchase Clearing Fee","Purchase Stamp Duty","Gain/Loss Price","Gain/Loss Value","Gain/Loss %","Broker","Clearing Fee","Stamp Duty","Net Selling Value","Net Gain/Loss Value","Net Gain/Loss %","Comment"'
+  count: 2
+- path: scripts/setup_jstock.sh
+  old: 'echo "Pre-populated data re-applied"'
+  new: |
+    # Use the application's persisted preference; the asynchronous news fetch
+    # can otherwise open a modal dialog after the task has already started.
+    python3 <<'JSTOCK_OPTIONS' || exit 1
+    from pathlib import Path
+    import re
+    import xml.etree.ElementTree as ET
+
+    path = Path('/home/ga/.jstock/1.0.7/config/options.xml')
+    original = path.read_text(encoding='utf-8')
+    root = ET.fromstring(original)
+    if root.tag != 'org.yccheok.jstock.gui.JStockOptions':
+        raise RuntimeError('Unexpected native JStock options root')
+    if len(root.findall('isAutoUpdateNewsEnabled')) != 1:
+        raise RuntimeError('Expected one native JStock news preference')
+    updated, count = re.subn(
+        r'<isAutoUpdateNewsEnabled>\s*(?:true|false)\s*</isAutoUpdateNewsEnabled>',
+        '<isAutoUpdateNewsEnabled>false</isAutoUpdateNewsEnabled>', original)
+    if count != 1:
+        raise RuntimeError('Unrecognized native JStock news preference')
+    path.write_text(updated, encoding='utf-8')
+    print('Disabled automatic JStock news in existing native options')
+    JSTOCK_OPTIONS
+    echo "Pre-populated data re-applied"
+- path: tasks/quarterly_portfolio_rebalance/export_result.sh
+  old: |
+    # 1. Kill JStock to flush all CSV data to disk
+    # ============================================================
+    pkill -f "jstock" 2>/dev/null || true
+    sleep 4
+  new: |
+    # 1. Close JStock normally so it saves its native CSVs
+    # ============================================================
+    # Linux's shutdown hook does not save on SIGTERM. Normal window disposal
+    # saves the portfolio and watchlist before the process exits.
+    for ((attempt=0; attempt<60; attempt++)); do
+        if ! pgrep -u ga -f 'jstock[.]jar' > /dev/null; then
+            break
+        fi
+        su - ga -c "DISPLAY=:1 wmctrl -F -c 'JStock News'" 2>/dev/null || true
+        su - ga -c "DISPLAY=:1 wmctrl -F -c 'System Tray Not Supported'" 2>/dev/null || true
+        su - ga -c "DISPLAY=:1 wmctrl -F -c 'JStock - Free Stock Market Software'" 2>/dev/null || true
+        sleep 1
+    done
+    if pgrep -u ga -f 'jstock[.]jar' > /dev/null; then
+        echo "ERROR: JStock did not exit normally; refusing to export stale state" >&2
+        exit 1
+    fi
+- path: tasks/quarterly_portfolio_rebalance/export_result.sh
+  old: 'def read_csv_entries(filepath):'
+  new: 'def read_csv_entries(filepath, amount_column=None):'
+- path: tasks/quarterly_portfolio_rebalance/export_result.sh
+  old: '            entries.append(entry)'
+  new: "            # Preserve native fields; expose the existing verifier schema.\n            if amount_column in entry:\n                entry[\"Amount\"] = entry[amount_column]\n            entries.append(entry)"
+- path: tasks/quarterly_portfolio_rebalance/export_result.sh
+  old: 'deposit_entries = read_csv_entries(os.path.join(portfolio_dir, "depositsummary.csv"))'
+  new: 'deposit_entries = read_csv_entries(os.path.join(portfolio_dir, "depositsummary.csv"), amount_column="Cash")'
+- path: tasks/quarterly_portfolio_rebalance/export_result.sh
+  old: 'dividend_entries = read_csv_entries(os.path.join(portfolio_dir, "dividendsummary.csv"))'
+  new: 'dividend_entries = read_csv_entries(os.path.join(portfolio_dir, "dividendsummary.csv"), amount_column="Dividend")'

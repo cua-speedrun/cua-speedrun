@@ -1,0 +1,52 @@
+{% extends "layout.html" %}
+{% block title %}Trajectory · run {{ run_id }} · cua-speedrun{% endblock %}
+{% block content %}
+<h1>Trajectory · run {{ run_id }}</h1>
+<p class="sub">Every observation the agent saw and every action it took, in order. <a href="/runs/{{ run_id }}">Back to run.</a></p>
+
+{% for t in tasks %}
+<h2>{{ t.task_id }} · seed {{ t.seed }}</h2>
+{% if t.instruction %}<p class="sub">{{ t.instruction }}</p>{% endif %}
+{% if not t.has_frames %}
+<p class="empty">No screenshots were captured for this task (older run, or the environment did not return frames).</p>
+{% endif %}
+{% for l in t.agent_logs %}
+<details class="event-inspector" data-agent-output-url="{{ l.url }}">
+  <summary>
+    <span>{{ "Agent stderr" if l.name == "agent.stderr" else "Agent stdout" }}</span>
+    <small>{{ l.name }} · full captured stream</small>
+  </summary>
+  <pre class="log" data-agent-output aria-live="polite">Open to load.</pre>
+</details>
+{% endfor %}
+
+<ol class="traj">
+  {% for s in t.steps %}
+  {% if s.kind == "observe" %}
+  <li class="traj-observe">
+    <div class="traj-n">observe{% if s.dur %} · {{ "%.2f" | format(s.dur) }}s{% endif %}</div>
+    {% if s.frame %}
+    <a href="/runs/{{ run_id }}/artifact/{{ t.task_id }}/{{ t.seed }}/{{ s.frame }}" target="_blank">
+      <img class="traj-frame" loading="lazy"
+           src="/runs/{{ run_id }}/artifact/{{ t.task_id }}/{{ t.seed }}/{{ s.frame }}"
+           alt="screenshot">
+    </a>
+    {% else %}<span class="chip muted">no frame</span>{% endif %}
+  </li>
+  {% elif s.kind == "step" %}
+  <li class="traj-step">
+    <span class="traj-arrow">↳ act{% if s.dur %} · {{ "%.2f" | format(s.dur) }}s{% endif %}</span>
+    <code class="traj-action">{{ s.actions | tojson }}</code>
+  </li>
+  {% elif s.kind == "done" %}
+  <li class="traj-done"><span class="chip live">agent marked done</span></li>
+  {% elif s.kind == "verdict" %}
+  <li class="traj-verdict">
+    <span class="chip {% if s.passed %}pass{% else %}fail{% endif %}">{{ "pass" if s.passed else "fail" }}</span>
+    <span class="traj-detail">{{ s.detail }}</span>
+  </li>
+  {% endif %}
+  {% endfor %}
+</ol>
+{% endfor %}
+{% endblock %}

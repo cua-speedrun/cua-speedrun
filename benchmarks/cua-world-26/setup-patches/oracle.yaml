@@ -1,0 +1,139 @@
+schema_version: 1
+replacements:
+- path: scripts/install_oracle.sh
+  old: |2-
+    # Install SQL Developer (GUI tool)
+    echo "Installing SQL Developer..."
+    SQLDEVELOPER_URL="https://download.oracle.com/otn_software/java/sqldeveloper/sqldeveloper-23.1.0.097.1607-no-jre.zip"
+    cd /tmp
+    wget -q "$SQLDEVELOPER_URL" -O sqldeveloper.zip || echo "SQL Developer download may require Oracle account"
+    if [ -f sqldeveloper.zip ]; then
+        unzip -o -q sqldeveloper.zip -d /opt/
+        chmod +x /opt/sqldeveloper/sqldeveloper.sh
+
+        # Create launcher script
+        cat > /usr/local/bin/sqldeveloper << 'EOF'
+    #!/bin/bash
+    export JAVA_HOME=/usr/lib/jvm/java-17-openjdk-amd64
+    cd /opt/sqldeveloper
+    ./sqldeveloper.sh "$@"
+    EOF
+        chmod +x /usr/local/bin/sqldeveloper
+        echo "SQL Developer installed"
+    else
+        echo "Warning: SQL Developer not downloaded - will use DBeaver as alternative"
+        # Install DBeaver as alternative GUI
+        apt-get install -y dbeaver-ce || snap install dbeaver-ce || true
+    fi
+    rm -f sqldeveloper.zip
+  new: |2-
+    # Install the GUI used by the task before creating the installation checkpoint.
+    # The SQL Developer download is not a dependency of this DBeaver task.
+    echo "Installing DBeaver Community 26.2.0 (Snap revision 549)..."
+    snap install dbeaver-ce --classic --revision=549
+    snap refresh --hold=forever dbeaver-ce
+- path: scripts/install_oracle.sh
+  old: |2-
+    if [ -f sqlcl.zip ]; then
+  new: |2-
+    if [ -s sqlcl.zip ] && unzip -tq sqlcl.zip >/dev/null 2>&1; then
+- path: scripts/setup_oracle.sh
+  old: |2-
+    # Install DBeaver if not present
+    echo "Checking for DBeaver..."
+    if ! which dbeaver-ce > /dev/null 2>&1; then
+        echo "Installing DBeaver Community Edition..."
+        snap install dbeaver-ce --classic 2>/dev/null || true
+        sleep 5
+    fi
+  new: |2-
+    # Require the pinned GUI installed by pre_start; do not silently change versions.
+    DBEAVER_REVISION=$(snap list dbeaver-ce | awk 'NR==2 {print $3}') || exit 1
+    if [ "$DBEAVER_REVISION" != "549" ]; then
+        echo "ERROR: Expected DBeaver Snap revision 549, found $DBEAVER_REVISION"
+        exit 1
+    fi
+- path: scripts/setup_oracle.sh
+  old: |2-
+    # Start DBeaver for the ga user
+  new: |2-
+    # Persist the installed product features' defaults before the first GUI launch.
+    # DBeaver reads this global file before creating its workbench (26.2.0).
+    python3 - <<'PRODUCT_CONFIG' || exit 1
+    import json
+    from pathlib import Path
+    import xml.etree.ElementTree as ET
+    import zipfile
+
+    features = {}
+    for path in sorted(Path("/snap/dbeaver-ce/current").rglob("*.jar")):
+        with zipfile.ZipFile(path) as jar:
+            try:
+                plugin = jar.read("plugin.xml")
+            except KeyError:
+                continue
+        for extension in ET.fromstring(plugin).findall("extension"):
+            if extension.get("point") == "org.jkiss.dbeaver.app.config":
+                for feature in extension.findall("feature"):
+                    features[feature.attrib["id"]] = {
+                        "enabled": feature.get("enabledByDefault", "false").lower() == "true"
+                    }
+    if not features:
+        raise RuntimeError("DBeaver product feature definitions were not found")
+    settings = Path("/home/ga/.local/share/DBeaverData/settings")
+    settings.mkdir(parents=True, exist_ok=True)
+    (settings / "product-config.json").write_text(
+        json.dumps({"features": features}, indent=2, sort_keys=True) + "\n"
+    )
+    print("DBeaver product defaults configured:", ", ".join(sorted(features)))
+    PRODUCT_CONFIG
+    chown -R ga:ga /home/ga/.local/share/DBeaverData
+
+    # Use the JDBC library installed with SQLcl for the preconfigured connection.
+    test -s /opt/sqlcl/lib/ojdbc11.jar || exit 1
+    install -D -m 644 /opt/sqlcl/lib/ojdbc11.jar /usr/local/share/java/ojdbc11.jar
+    DRIVER_CONFIG=/home/ga/.local/share/DBeaverData/workspace6/.metadata/.config
+    mkdir -p "$DRIVER_CONFIG"
+    cat > "$DRIVER_CONFIG/drivers.xml" <<'DRIVERS'
+    <?xml version="1.0" encoding="UTF-8"?>
+    <drivers>
+      <provider id="oracle">
+        <driver id="oracle_thin" custom="false">
+          <library type="jar" path="/usr/local/share/java/ojdbc11.jar" custom="true"/>
+        </driver>
+      </provider>
+    </drivers>
+    DRIVERS
+    chown -R ga:ga /home/ga/.local/share/DBeaverData
+
+    # Start DBeaver for the ga user
+- path: scripts/setup_oracle.sh
+  old: |2-
+    DISPLAY=:1 dbeaver-ce > /tmp/dbeaver.log
+  new: |2-
+    DBEAVER_DATA=/home/ga/.local/share DISPLAY=:1 dbeaver-ce -data /home/ga/.local/share/DBeaverData/workspace6 -vmargs -Ddbeaver.drivers.configuration-file=/home/ga/.local/share/DBeaverData/workspace6/.metadata/.config/drivers.xml > /tmp/dbeaver.log
+- path: scripts/setup_oracle.sh
+  old: |2-
+    grep -qiE "statistics|sample|collection"
+  new: |2-
+    grep -qiE "statistics|sample|collection|product configuration"
+- path: scripts/setup_oracle.sh
+  old: |2-
+        # Maximize the DBeaver window
+  new: |2-
+        if DISPLAY=:1 wmctrl -l 2>/dev/null | grep -qi "product configuration"; then
+            echo "ERROR: DBeaver Product Configuration still blocks the workbench"
+            exit 1
+        fi
+
+        # Maximize the DBeaver window
+- path: tasks/claims_pipeline_reconciliation/setup_task.sh
+  old: |2-
+    DISPLAY=:1 /snap/bin/dbeaver-ce &
+  new: |2-
+    DBEAVER_DATA=/home/ga/.local/share DISPLAY=:1 /snap/bin/dbeaver-ce -data /home/ga/.local/share/DBeaverData/workspace6 -vmargs -Ddbeaver.drivers.configuration-file=/home/ga/.local/share/DBeaverData/workspace6/.metadata/.config/drivers.xml &
+- path: tasks/claims_pipeline_reconciliation/setup_task.sh
+  old: |2-
+    DISPLAY=:1 dbeaver-ce &
+  new: |2-
+    DBEAVER_DATA=/home/ga/.local/share DISPLAY=:1 dbeaver-ce -data /home/ga/.local/share/DBeaverData/workspace6 -vmargs -Ddbeaver.drivers.configuration-file=/home/ga/.local/share/DBeaverData/workspace6/.metadata/.config/drivers.xml &

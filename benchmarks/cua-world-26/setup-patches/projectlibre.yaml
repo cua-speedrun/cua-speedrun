@@ -1,0 +1,14 @@
+schema_version: 1
+replacements:
+- path: scripts/setup_projectlibre.sh
+  old: 'pkill -f "/usr/share/projectlibre"'
+  new: 'pkill -u ga -f "/usr/share/projectlibre"'
+- path: scripts/setup_projectlibre.sh
+  old: 'pkill -f "projectlibre"'
+  new: 'pkill -u ga -f "projectlibre"'
+- path: scripts/setup_projectlibre.sh
+  old: 'pgrep -f "projectlibre"'
+  new: 'pgrep -u ga -f "projectlibre"'
+- path: scripts/setup_projectlibre.sh
+  old: 'pkill -9 -f "projectlibre"'
+  new: 'pkill -9 -u ga -f "projectlibre"'

@@ -1,0 +1,15 @@
+schema_version: 1
+replacements:
+- path: scripts/setup_wps.sh
+  old: |-
+    [EULADialog]
+    bAgreed=true
+    version=11.1.0.11723
+  new: |-
+    [EULADialog]
+    bAgreed=true
+    version=11.1.0.11723
+
+    [6.0]
+    common\AcceptedEULA=true
+    common\UserInfo\ACUPI=true

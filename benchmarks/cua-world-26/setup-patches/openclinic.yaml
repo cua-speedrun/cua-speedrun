@@ -1,0 +1,11 @@
+schema_version: 1
+replacements:
+- path: scripts/install_openclinic_cache_safe.sh
+  old: './setup || echo "WARNING: setup exited non-zero; post_start will verify service readiness"'
+  new: |
+    # Install services without replacing the packaged database's locale settings.
+    test "$(grep -c '^echo Please enter your language' setup)" = 1
+    sed -e '/^echo Please enter your language/,$d' \
+        -e 's/^apt-get install /apt-get install -y /' \
+        setup > /tmp/openclinic-unattended-setup.sh
+    bash /tmp/openclinic-unattended-setup.sh </dev/null

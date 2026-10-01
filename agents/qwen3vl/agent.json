@@ -1,0 +1,4 @@
+{
+  "description": "Qwen3-VL-8B observe/action agent using normalized coordinates and a bounded action history.",
+  "gpu": "L40S"
+}

@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "task_name": "os__4783cc41-c03c-4e1b-89b4-50658f642bd5",
+  "operations": [
+    {
+      "op": "replace",
+      "index": 2,
+      "value": {
+        "type": "launch",
+        "parameters": {
+          "command": "gnome-terminal --title=Terminal --working-directory=/home/user"
+        }
+      }
+    }
+  ]
+}

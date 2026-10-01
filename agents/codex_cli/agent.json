@@ -1,0 +1,7 @@
+{
+  "description": "Codex CLI driving the desktop through an authenticated local action gateway and the standard Computer API.",
+  "required_environment_variables": [
+    "OPENAI_API_KEY"
+  ],
+  "gpu": null
+}

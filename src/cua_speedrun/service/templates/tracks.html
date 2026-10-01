@@ -1,0 +1,165 @@
+{% extends "layout.html" %}
+{% block title %}Tracks · cua-speedrun{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div>
+    <h1>Tracks</h1>
+    <p>Maintainer-defined execution and scoring contracts. Benchmarks, agent templates, and execution placement remain separate choices.</p>
+  </div>
+  <div class="page-actions"><a class="btn" href="/submit{% if track %}?track={{ track.name | urlencode }}{% endif %}">New evaluation</a></div>
+</header>
+
+{% if track %}
+<div class="track-explorer">
+  <nav class="track-directory" aria-label="Track catalog">
+    <header><span>Catalog</span><strong>{{ tracks | length }} {{ "track" if tracks | length == 1 else "tracks" }}</strong></header>
+    {% for option in tracks %}
+    <a href="/tracks/{{ option.name | urlencode }}" {% if option.active %}aria-current="page"{% endif %}>
+      <strong>{{ option.name }}</strong>
+      <span>{{ option.gpu or "No GPU" }} · {{ option.algorithm.label }}</span>
+    </a>
+    {% endfor %}
+  </nav>
+
+  <article class="track-profile">
+    <header class="track-profile-header">
+      <div>
+        <span class="track-kicker">Track contract</span>
+        <h2>{{ track.name }}</h2>
+        <p>{{ track.algorithm.summary }}</p>
+      </div>
+      <div class="track-profile-tags">
+        <span class="chip">{{ track.gpu or "CPU" }}</span>
+        <span class="chip live">{{ track.algorithm.label }}</span>
+      </div>
+    </header>
+
+    <section class="track-ownership" aria-label="Track ownership">
+      <div>
+        <span>Fixed by maintainers</span>
+        <p>Agents per evaluation, scoring, seed policy, and execution defaults.</p>
+      </div>
+      <div>
+        <span>Chosen for each evaluation</span>
+        <p>Benchmark, agent, GPU type, algorithm, parallel evaluations, and execution placement.</p>
+      </div>
+    </section>
+
+    <section class="algorithm-panel" aria-labelledby="algorithm-title">
+      <header>
+        <div>
+          <span>Default evaluation algorithm</span>
+          <h2 id="algorithm-title">{{ track.algorithm.label }}</h2>
+        </div>
+        <code>{{ track.algorithm.key }}</code>
+      </header>
+
+      <div class="algorithm-flow{% if not track.algorithm.shared_compute %} isolated{% endif %}" aria-label="Execution shape for one evaluation">
+        <div class="flow-node">
+          <span>Evaluation replica</span>
+          <strong>1</strong>
+          <small>User-scaled independently</small>
+        </div>
+        <span class="flow-arrow" aria-hidden="true">→</span>
+        {% if track.algorithm.shared_compute %}
+        <div class="flow-node emphasized">
+          <span>Reusable compute</span>
+          <strong>1</strong>
+          <small>Shared across task batches</small>
+        </div>
+        <span class="flow-arrow" aria-hidden="true">→</span>
+        <div class="flow-pair">
+          <div class="flow-node"><span>Active agents</span><strong>{{ track.agents_per_evaluation }}</strong><small>Per evaluation</small></div>
+          <div class="flow-node"><span>Prepared env pool</span><strong>{{ track.environment_pool_size }}</strong><small>{{ track.algorithm.environment_pool_factor }}× agent slots</small></div>
+        </div>
+        {% else %}
+        <div class="flow-node emphasized">
+          <span>Isolated task slots</span>
+          <strong>{{ track.agents_per_evaluation }}</strong>
+          <small>Fresh compute + VM per task</small>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="algorithm-meta">
+        <span><b>Agent mode</b>{{ track.algorithm.agent_mode }}</span>
+        <span><b>Parallel evaluations</b>{{ "Supported" if track.algorithm.supports_parallel_evaluations else "Fixed at one" }}</span>
+        <span><b>Runtime capabilities</b>{{ track.algorithm.required_capabilities | join(", ") or "None" }}</span>
+      </div>
+    </section>
+
+    <section class="track-contract-grid" aria-label="Track details">
+      <article class="contract-card">
+        <header><span>01</span><h3>Resources</h3></header>
+        <dl>
+          <div><dt>Default GPU</dt><dd>{{ track.gpu or "None" }}</dd></div>
+          <div><dt>Agents / evaluation</dt><dd>{{ track.agents_per_evaluation }}</dd></div>
+          <div><dt>Prepared env pool</dt><dd>{{ track.environment_pool_size }}</dd></div>
+        </dl>
+      </article>
+
+      <article class="contract-card">
+        <header><span>02</span><h3>Scoring</h3></header>
+        <dl>
+          <div><dt>Success bar</dt><dd>{{ "%.0f" | format(track.success_percent) }}%</dd></div>
+          <div><dt>Ranking</dt><dd>{{ track.ranking_rule }}</dd></div>
+          <div><dt>Failed task charge</dt><dd>{{ track.failure_charge }}</dd></div>
+        </dl>
+      </article>
+
+      <article class="contract-card">
+        <header><span>03</span><h3>Sampling</h3></header>
+        <dl>
+          <div><dt>Runs / task</dt><dd>{{ track.runs_per_task }}</dd></div>
+          <div><dt>Seed policy</dt><dd>{{ track.seed_policy }}</dd></div>
+          <div><dt>Leaderboard role</dt><dd>{{ "Reference only" if track.reference_only else "Competitive" }}</dd></div>
+        </dl>
+      </article>
+    </section>
+
+    <section class="track-lower-grid">
+      <article class="topology-panel">
+        <header><span>Current installation</span><h3>Compatible execution</h3></header>
+        {% if track.supported_topologies %}
+        <div class="topology-list">
+          {% for topology in track.supported_topologies %}
+          <div><span class="topology-mark" aria-hidden="true"></span><strong>{{ topology.label }}</strong><code>{{ topology.key }}</code></div>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p>No registered execution topology provides this algorithm's required capabilities.</p>
+        {% endif %}
+      </article>
+
+      <article class="implementation-panel">
+        <header><span>Implementation</span><h3>Versioned Python module</h3></header>
+        <code class="source-path">{{ track.algorithm.source_file }}</code>
+        {% if track.algorithm.aliases %}<p>Aliases: {{ track.algorithm.aliases | join(", ") }}</p>{% endif %}
+        <p>The algorithm code is included in the run's measurement hash.</p>
+      </article>
+    </section>
+
+    {% if track.server_config %}
+    <details class="source-details">
+      <summary><span>Track server configuration</span><code>JSON</code></summary>
+      <pre><code>{{ track.server_config | tojson(indent=2) }}</code></pre>
+    </details>
+    {% endif %}
+
+    {% if track.algorithm.source %}
+    <details class="source-details">
+      <summary><span>Algorithm source</span><code>{{ track.algorithm.source_file }}</code></summary>
+      <pre><code>{{ track.algorithm.source }}</code></pre>
+    </details>
+    {% endif %}
+
+    <footer class="track-profile-footer">
+      <p>Changing a track-owned value or this algorithm creates a different comparison contract.</p>
+      <a class="btn" href="/submit?track={{ track.name | urlencode }}">Run this track</a>
+    </footer>
+  </article>
+</div>
+{% else %}
+<section class="empty-state"><h2>No tracks registered</h2><p>Add a track to <code>catalog/tracks.yaml</code> and restart the dashboard.</p></section>
+{% endif %}
+{% endblock %}

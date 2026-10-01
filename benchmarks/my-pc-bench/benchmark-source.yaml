@@ -1,0 +1,134 @@
+schema_version: 1
+prepare:
+  default_environment: modal-native
+  modal-native:
+  - script: scripts/import_desktop_image.py
+    args: [--image, mypcbench, --benchmark, "{benchmark}"]
+name: my-pc-bench
+version: '0.2'
+description: The 38-task representative MyPCBench benchmark.
+evaluator_environment:
+  required: [MYPCBENCH_JUDGE_API_KEY]
+  private: [MYPCBENCH_JUDGE_API_KEY]
+source_benchmark:
+  name: mypcbench
+  version: v1.2.47-df5046c4
+  repository: https://github.com/ljang0/MyPCBench
+  commit: caf9c754ffe0b41c7e629e17fff19299774af1cb
+  image_dataset: https://huggingface.co/datasets/ljang0/mypcbench-qemu-baseline
+  image_revision: eeefdb7ca4686b8175ced740b0d1abb986021ec0
+  image_version: daily-bake-2026-09-16
+  tasks:
+    path: tasks/final/all_tasks_with_grading.json
+    url: https://raw.githubusercontent.com/ljang0/MyPCBench/caf9c754ffe0b41c7e629e17fff19299774af1cb/tasks/final/all_tasks_with_grading.json
+    sha256: e36d9c08b8c7b6c84304c84578b64b968da0809fdda51f76795623919fc7a384
+    task_count: 184
+selection:
+  method: unweighted_raw_energy_best_of_n
+  selected_task_count: 38
+  task_ids_sha256: b9c360756f11fcd82d093eb63ed36f472a31e1c3b2289025c817e7bd2ecde15a
+  score_panel_sha256: a59d2f430aeecbe487c26ce59eaf5bacaa596a53d0713eb8847ad128da54178d
+  task_inventory_sha256: d4bf6fec34915c4ed4b6359dd52166efe2cbeb0bb1d0309f1db64c370db16e36
+  programmatic_task_source_sha256: c1190a2e2e4c43042cd51929773f3a749f2ee83235ad461970c28065615927ea
+  selector:
+    path: scripts/select_representative_tasks.py
+    commit: b2f69586e413d84445ad2f6450bf9c0487f05c5f
+    sha256: 5d830ec22ff3417c6fd5345a08ae0c77d94f2e719bfa78addc2eabf37a91205f
+    starts: 100
+    seed_base: 7000
+    rank_threshold: 0.95
+grading:
+  rubric_aggregation: uniform_mean
+  pass_condition: all_rubrics
+agent_context:
+  capability: cua_only
+  source:
+    repository: https://github.com/ljang0/MyPCBench
+    commit: 24f388e579c503a1095d9fdde0944ffb8945ff33
+    path: agent-harness/agents/prompts.py
+    renderer: build_mypcbench_context(has_bash=False)
+  prompt: "## Persona\n\n- Name: Michael Scott\n- Email: `michael.scott@dundermifflin.com`\n\
+    - Linux user: `user` (GUI session only)\n\n## Environment\n\n- Ubuntu 24.04 GNOME\
+    \ desktop. Browser: Firefox (pre-logged-in to every\n  web app via the bookmarks\
+    \ toolbar).\n- Pinned to dock: HooliChat, HooliWork, Firefox, LibreOffice Writer/Calc/Impress,\
+    \ VS Code.\n- `/home/user/Documents/`, `/home/user/Downloads/`, `/home/user/Maildir/`\
+    \ hold persona files.\n\n## Web apps\n\nEach is served at `http://localhost:PORT`,\
+    \ pre-authenticated as the persona.\n\n| Port | App             | Domain     \
+    \                                             |\n|------|-----------------|---------------------------------------------------------|\n\
+    | 3001 | Gringotts       | personal banking: accounts, transactions, transfers\
+    \     |\n| 3002 | BatBucks        | stock / crypto trading: portfolio, orders\
+    \               |\n| 3003 | OddsMarket      | prediction markets: bets, positions\
+    \                     |\n| 3004 | HooliChat       | direct + group messaging \
+    \                               |\n| 3005 | HooliWork       | workplace channels\
+    \                                      |\n| 3006 | eTaxi           | ride hailing:\
+    \ trips, drivers                            |\n| 3007 | HangryDash      | food\
+    \ delivery: orders, restaurants                      |\n| 3008 | TableFind   \
+    \    | restaurant reservations                                 |\n| 3009 | Kwik-E-Mart\
+    \     | grocery orders, inventory                               |\n| 3010 | HooliShop\
+    \       | e-commerce: orders, carts, products                     |\n| 3011 |\
+    \ Dinoco Airlines | flight bookings, itineraries                            |\n\
+    | 3012 | Cheskepdia      | short-term rental bookings                        \
+    \      |\n| 3013 | SprintBoard     | project tasks, sprints                  \
+    \                |\n| 3014 | LockedIn        | professional networking, jobs,\
+    \ connections              |\n| 3015 | SpeedTax        | tax returns, filings\
+    \                                    |\n| 3016 | HooliMail       | email inbox\
+    \                                             |\n| 3017 | HooliCalendar   | events,\
+    \ invitations                                     |\n\n## Output\n\n- Place your\
+    \ final answer (numbers, text, file paths) as plain text in\n  your last assistant\
+    \ turn before any stop signal."
+materializer:
+  path: scripts/build_mypcbench_subset.py
+  function: materialize
+  inputs:
+  - scripts/build_mypcbench_subset.py
+  - benchmarks/mypcbench-image.json
+  - scripts/build_mypcbench_modal_image.py
+  - scripts/mypcbench_shared/canonical/osworld_full_traj_judge.py
+  - scripts/mypcbench_shared/canonical/provenance.json
+  - scripts/mypcbench_shared/mypcbench_setup.py
+  - scripts/mypcbench_shared/mypcbench_verifier.py
+  - scripts/mypcbench_shared/native_delta.sh
+  - scripts/mypcbench_shared/native_image.py
+tasks:
+- aggregation-f002
+- aggregation-f005
+- aggregation-f029
+- aggregation-f033
+- contradiction-f015
+- contradiction-f023
+- counterfactual-f001
+- counterfactual-f004
+- counterfactual-f008
+- cua_only-f004
+- cua_only-f006
+- cua_only-f018
+- cua_only-f021
+- cua_only-f023
+- hard_app-f011
+- hard_app-f019
+- hard_app-f022
+- long_horizon-f028
+- long_horizon-f043
+- long_horizon-f045
+- long_horizon-f047
+- long_horizon-f050
+- long_horizon-f060
+- long_horizon-f074
+- preference_inference-f004
+- preference_inference-f014
+- preference_inference-f021
+- preference_inference-f023
+- preference_inference-f025
+- retrieval-f005
+- retrieval-f029
+- situated_action-f001
+- situated_action-f003
+- situated_action-f006
+- situated_action-f017
+- situated_action-f026
+- situated_action-f035
+- situated_action-f039
+native_image: true
+runtime:
+  max_steps: 100
+  default_timeout_sec: 7200

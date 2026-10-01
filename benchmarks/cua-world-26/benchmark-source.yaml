@@ -1,0 +1,767 @@
+schema_version: 1
+prepare:
+  default_environment: modal-native
+native_image:
+  manifest: benchmarks/desktop-images.json
+  name: cua-world-base
+required_devices:
+  docker_desktop_env: [/dev/kvm]
+name: cua-world-26
+version: '0.5'
+description: Fixed 26-task subset of the canonical CUA-World long_horizon split.
+source_benchmark:
+  name: cua_world
+  repository: https://github.com/cmu-l3/gym-anything
+  commit: d5e3f88bdc66fcc79c037c4e5da48554535e52bb
+  archive_sha256: 29aefe3285860706b97bc61f7be6c9cab313f536773e2768abefdb40cb4ce293
+selection:
+  split: long_horizon
+  selected_task_count: 26
+  platform_counts:
+    windows: 0
+    linux: 26
+    android: 0
+protocol:
+  instruction_prefix: Interact with the task computer only through its graphical user
+    interface (GUI). Do not use terminal commands, scripts, or direct APIs to bypass
+    the GUI.
+  task_limits: source_task_json
+  verifier:
+    mode: vlm_checklist
+    spec:
+      backend: gemini
+      model: gemini-3-flash-preview
+      frame_strategy: all
+      max_frames: -1
+      completion_threshold: 100
+      integrity_threshold: 1
+  cache_level: default
+host_runtime:
+  native_runner: gym-anything
+  forward_env:
+  - GEMINI_API_KEY
+asset_setup:
+  fetch_script_environments: []
+  manual_download_environments: []
+materializer:
+  path: scripts/import_cua_world_long.py
+  function: materialize
+  inputs:
+  - scripts/import_cua_world_long.py
+  - benchmarks/desktop-images.json
+  - benchmarks/cua-world-26/setup-patches/jstock.yaml
+  - benchmarks/cua-world-26/setup-patches/odoo.yaml
+  - benchmarks/cua-world-26/setup-patches/dhis2.yaml
+  - benchmarks/cua-world-26/setup-patches/oracle.yaml
+  - benchmarks/cua-world-26/setup-patches/openclinic.yaml
+  - benchmarks/cua-world-26/setup-patches/projectlibre.yaml
+  - benchmarks/cua-world-26/setup-patches/pymol.yaml
+  - benchmarks/cua-world-26/setup-patches/rocket-chat.yaml
+  - benchmarks/cua-world-26/setup-patches/splunk.yaml
+  - benchmarks/cua-world-26/setup-patches/wps.yaml
+setup_patches:
+  jstock_env: benchmarks/cua-world-26/setup-patches/jstock.yaml
+  odoo_inventory_env: benchmarks/cua-world-26/setup-patches/odoo.yaml
+  dhis2_env: benchmarks/cua-world-26/setup-patches/dhis2.yaml
+  oracle_database_env: benchmarks/cua-world-26/setup-patches/oracle.yaml
+  openclinic_ga_env: benchmarks/cua-world-26/setup-patches/openclinic.yaml
+  project_libre_env: benchmarks/cua-world-26/setup-patches/projectlibre.yaml
+  pymol_env: benchmarks/cua-world-26/setup-patches/pymol.yaml
+  rocket_chat_env: benchmarks/cua-world-26/setup-patches/rocket-chat.yaml
+  splunk_env: benchmarks/cua-world-26/setup-patches/splunk.yaml
+  wps_presentation_env: benchmarks/cua-world-26/setup-patches/wps.yaml
+tasks:
+- id: cua_world_long_ardour_env__broadcast_podcast_stem_delivery
+  env_name: ardour_env
+  task_name: broadcast_podcast_stem_delivery
+  platform: linux
+  environment_sha256: dd418f4ac6a74a683892f6413eaee7e22ce0ce53de94ee22ff1ebbd4ca2046ec
+  description: You are the audio engineer delivering the final mix of Episode 12 of
+    the podcast 'The Deep Dive.' The Ardour session has four named tracks (Host, Guest,
+    Music_Bed, SFX) with corresponding audio files in the session's audiofiles directory.
+    Complete the full mix-down and stem delivery following the mixing notes at ~/Desktop/mixing_notes.txt
+    — covering audio import, submix bus routing, gain/pan staging, music ducking automation,
+    chapter markers, and stem exports to /home/ga/Audio/podcast_delivery/. Save a
+    session snapshot named 'EP12_Final_Mix' when complete.
+- id: cua_world_long_dhis2_env__rmncah_scorecard_dashboard
+  env_name: dhis2_env
+  task_name: rmncah_scorecard_dashboard
+  platform: linux
+  environment_sha256: 01acbe4d22727c8acdbcc7ee9a473cfe174846934a321a0fb4cfad5eb3a2bbba
+  description: 'You are the National RMNCAH Programme Manager for Sierra Leone. Configure
+    DHIS2 to produce a quarterly performance scorecard for monitoring district-level
+    Reproductive, Maternal, Newborn, Child and Adolescent Health indicators.
+
+
+    Create two indicators in DHIS2 Maintenance using the ''Per cent'' indicator type
+    (factor 100):
+
+
+    1. ''ANC 4th Visit Completion Rate (%)'' — numerator: ANC 4th or more visits;
+    denominator: ANC 1st visit
+
+    2. ''Penta1-Penta3 Dropout Rate (%)'' — numerator: (Penta1 doses given minus Penta3
+    doses given); denominator: Penta1 doses given
+
+
+    Create a legend set ''RMNCAH Performance'' with three tiers: Red (0–50, color
+    #FF0000), Yellow (50–80, color #FFFF00), Green (80–100, color #00FF00).
+
+
+    In Data Visualizer, build a pivot table named ''RMNCAH District Scorecard Q4 2025''
+    showing both indicators for all districts for October–December 2025. Configure
+    the layout with indicators as columns and districts as rows. Apply the RMNCAH
+    Performance legend to the table.
+
+
+    Create a dashboard named ''RMNCAH Scorecard Dashboard 2025'' containing the scorecard
+    pivot table.
+
+
+    Login: admin / district'
+- id: cua_world_long_docker_desktop_env__diagnose_broken_microservices_stack
+  env_name: docker_desktop_env
+  task_name: diagnose_broken_microservices_stack
+  platform: linux
+  environment_sha256: ca2cd55632b9d53d05e207f1dc7969ee5a9a23f8bba13294fab13aec1143e33e
+  description: 'A Flask-based inventory API with PostgreSQL, Redis, and an Nginx reverse
+    proxy has been deployed at /home/ga/microservices-debug/ using Docker Compose.
+    All four services have been started, but the application is not functioning correctly.
+    Diagnose and fix all configuration issues so that: (1) curl http://localhost:80/api/health
+    returns HTTP 200 with JSON containing "status": "healthy", "database": "connected",
+    and "cache": "connected", (2) curl http://localhost:80/api/items returns HTTP
+    200 with a JSON array of inventory items from the database with id, name, and
+    price fields, and (3) all four services (nginx, flask-app, db, redis) remain running.
+    The Flask application source code (app/app.py) is correct and must NOT be modified.
+    The issues are in the deployment configuration.'
+- id: cua_world_long_gpredict_env__poes_downlink_schedule_setup
+  env_name: gpredict_env
+  task_name: poes_downlink_schedule_setup
+  platform: linux
+  environment_sha256: 4cfef35e65680dd564ee248bba9f0822828e92e619b39a2761221a348dd06912
+  description: 'You are a NOAA meteorologist at Wallops Island preparing a satellite
+    downlink schedule. GPredict''s POES_Tracking module needs to be brought to operational
+    status. Correct the Wallops_CDA ground station to: latitude 37.9402°N, longitude
+    75.4576°W, altitude 15m, weather station code KWAL. Set it as the default ground
+    station. The POES_Tracking module should track the operational NOAA polar-orbiting
+    fleet: NOAA-15 (NORAD 25338), NOAA-18 (NORAD 28654), NOAA-19 (NORAD 33591), METOP-B
+    (NORAD 38771), METOP-C (NORAD 43689), and SUOMI NPP (NORAD 37849). Remove any
+    non-POES satellites currently in the module and add any missing ones. Bind the
+    module to Wallops_CDA. Configure the module with a Map and Table layout: topographical
+    map background with the solar terminator line enabled, and a satellite table showing
+    Azimuth, Elevation, Range, and Range Rate columns. Set global preferences to UTC
+    time display and Metric units. Generate upcoming pass predictions for METOP-C
+    from Wallops_CDA and save the results to ~/Documents/METOP_C_passes.txt. Leave
+    GPredict maximized with the POES_Tracking module visible. Login: username ''ga'',
+    password ''password123''.'
+- id: cua_world_long_gvsig_desktop_env__vulnerability_map_remote_communities
+  env_name: gvsig_desktop_env
+  task_name: vulnerability_map_remote_communities
+  platform: linux
+  environment_sha256: 8d587fb4f675bed6d88fd0db4853b1426b193bcda29bb5ea606c06ec2bcad9b1
+  description: 'You are a GIS analyst at an international development agency preparing
+    a vulnerability assessment. Your task is to identify populated places that are
+    both geographically isolated from major river trade routes and located in economically
+    disadvantaged countries, then produce a publication-quality thematic map.
+
+
+    Using gvSIG Desktop with the countries, rivers, and populated places datasets:
+
+
+    1. Compute GDP per capita for each country by adding a numeric field called GDP_PCAP
+    to the countries layer using the Field Calculator. The formula is: GDP_PCAP =
+    GDP_MD * 1000000 / POP_EST
+
+
+    2. Buffer all rivers by 2 degrees to define trade-accessible zones.
+
+
+    3. Identify populated places that fall outside the river buffer zones (geographically
+    isolated from trade routes) AND are located in countries where GDP_PCAP is below
+    5000. Export these vulnerable communities to /home/ga/gvsig_data/exports/vulnerable_communities.shp
+
+
+    4. Apply graduated color symbology to the countries layer on the GDP_PCAP field
+    using 5 manual class breaks: 0-1000, 1000-3000, 3000-10000, 10000-30000, and above
+    30000. Display vulnerable communities as red point symbols with NAME labels.
+
+
+    5. Create a map layout with the title ''Vulnerable Remote Communities'', a legend,
+    scale bar, and north arrow. Export the layout to /home/ga/gvsig_data/exports/vulnerability_map.png
+
+
+    Save the project to /home/ga/gvsig_data/projects/vulnerability_analysis.gvsproj'
+- id: cua_world_long_jstock_env__quarterly_portfolio_rebalance
+  env_name: jstock_env
+  task_name: quarterly_portfolio_rebalance
+  platform: linux
+  environment_sha256: 53c068efd9bc117fce93612d07eff694f633e5195b7b025f3a64fb1996eab113
+  description: 'Read the quarterly rebalancing memo at /home/ga/Documents/q1_rebalance_memo.txt.
+    Your existing portfolio contains AAPL (150 shares), MSFT (80 shares), NVDA (35
+    shares), and JNJ (40 shares). Following the memo, execute these Q1 adjustments:
+    record a $25,000 deposit dated March 1, 2024 with comment ''Q1 capital contribution'';
+    record an AAPL dividend of $111.00 received March 10, 2024 with comment ''Q1 2024
+    dividend''; sell 50 AAPL shares at $215.00 and 15 NVDA shares at $750.00, both
+    on March 15, 2024; buy three new positions by computing the maximum whole shares
+    (rounded down) from the dollar allocations and prices in the memo, all on March
+    15, 2024. Apply $4.95 broker commission to every trade. Create a watchlist ''Q1
+    Rebalance Watch'' with all six current holdings, setting Fall Below alerts at
+    5% below and Rise Above alerts at 10% above each stock''s earliest purchase price.
+    Export the buy portfolio to /home/ga/Documents/portfolio_q1_export.csv.'
+- id: cua_world_long_librehealth_ehr_env__implement_lab_workflow_and_process_patient
+  env_name: librehealth_ehr_env
+  task_name: implement_lab_workflow_and_process_patient
+  platform: linux
+  environment_sha256: 56b514d78efdc0be08b29ac4c03a1ebddcf937fd4193801ab99f8c3ce3001fa4
+  description: Your small family practice has acquired an in-house HbA1c analyzer.
+    A comprehensive lab order request document at /home/ga/Desktop/lab_order_request.txt
+    contains procedure configuration details, patient information, test results to
+    enter, and clinical follow-up actions. Configure the HbA1c test procedure hierarchy
+    in the EHR, then process the specified patient's lab order with an encounter and
+    result entry, and complete the clinical care cycle by adding the indicated diagnosis,
+    writing the prescribed medication, and scheduling the follow-up appointment —
+    all per the document's instructions. Login with admin / password.
+- id: cua_world_long_moodle_env__configure_tiered_assessment_pathway
+  env_name: moodle_env
+  task_name: configure_tiered_assessment_pathway
+  platform: linux
+  environment_sha256: fbcdc2d7bc6ae1be00a2088a66f1c151c3030f61acea676b983f63088667c1f9
+  description: 'You are the instructional designer for NUR401 Clinical Pharmacology,
+    a nursing program course that requires tiered mastery progression. Log in to Moodle
+    as admin (username: admin, password: Admin1234!) at http://localhost. Navigate
+    to the NUR401 course and configure it as follows.
+
+
+    Tier 1 — Foundation (Section 1): Add a quiz named "Drug Classification Exam" using
+    the 5 pre-loaded questions from the "Pharmacology Fundamentals" question bank
+    category. Set a 30-minute time limit, 2 maximum attempts, and grade-to-pass of
+    75%. Activity completion: require passing grade. Also add a Page named "Pharmacokinetics
+    Reading" with content "This module covers drug absorption, distribution, metabolism,
+    and excretion (ADME) principles." Activity completion: require view.
+
+
+    Tier 2 — Application (Section 2): Add an assignment "Medication Safety Case Study"
+    with online text submission, maximum grade 100, grade-to-pass 60%. Restrict access:
+    require completion (with passing grade) of Drug Classification Exam AND completion
+    of Pharmacokinetics Reading. Completion: require submission.
+
+
+    Tier 3 — Synthesis (Section 3): Add a Q&A forum "Clinical Drug Interaction Analysis".
+    Enable rating with Average of ratings aggregation on a 1–5 scale. Restrict access:
+    require passing grade on Medication Safety Case Study. Completion: require posting.
+
+
+    Gradebook: Set the course aggregation to weighted mean of grades. Create categories
+    Foundation (25%), Application (35%), Synthesis (40%). Move grade items into their
+    respective categories.
+
+
+    Course Completion: Require passing the Drug Classification Exam, passing the Medication
+    Safety Case Study, and posting in the Clinical Drug Interaction Analysis forum.'
+- id: cua_world_long_nextgen_connect_integration_engine_env__adt_census_lab_validation_pipeline
+  env_name: nextgen_connect_integration_engine_env
+  task_name: adt_census_lab_validation_pipeline
+  platform: linux
+  environment_sha256: b84587317ea74acf2795c7b016f1244066e637a1e7bb3a3faf8da461e2cec541
+  description: 'You are a Senior Integration Engineer building an end-to-end clinical
+    pipeline for a regional hospital network. The system must process ADT admission/discharge
+    events to maintain a live patient census, then use that census to validate incoming
+    lab results before routing critical values to an alerting system.
+
+
+    Channel 1: ''ADT_Census_Manager'' — TCP Listener on port 6661 (MLLP). For ADT^A01
+    (admit): insert into the active_census table (mrn, patient_name, department, attending_physician,
+    status=''active'', admit_time). For ADT^A03 (discharge): update the matching patient''s
+    status to ''discharged'' with discharge_time. Return a standard HL7 ACK.
+
+
+    Channel 2: ''Lab_Results_Validator'' — TCP Listener on port 6662 (MLLP). JavaScript
+    transformer queries active_census by MRN (PID-3.1). If the patient has status=''active'':
+    enrich with department and attending_physician, then route to Channel 3 via Channel
+    Writer. If not found or discharged: insert into rejected_results table. Response
+    Transformer returns MSA|AA (with department in MSA-6) for accepted, or MSA|AR
+    for rejected.
+
+
+    Channel 3: ''Critical_Value_Processor'' — Receives from Channel 2. Insert ALL
+    results into lab_results table (mrn, test_code, result_value, units, abnormal_flag,
+    physician, department). If any OBX-8 contains ''HH'' or ''LL'', also insert into
+    critical_alerts table and write a JSON alert file to /tmp/critical_alerts/.
+
+
+    Create all database tables yourself. Sample HL7 messages are at /home/ga/. REST
+    API: https://localhost:8443/api (admin/admin, header: X-Requested-With: OpenAPI).
+    PostgreSQL: jdbc:postgresql://nextgen-postgres:5432/mirthdb (postgres/postgres).'
+- id: cua_world_long_nosh_env__care_quality_remediation
+  env_name: nosh_env
+  task_name: care_quality_remediation
+  platform: linux
+  environment_sha256: 83489cd20f869afb17d3da3d44c29e3ffb6cffd5136614282b920f8a9c46e4c2
+  description: 'The practice has completed its quarterly quality review. The findings
+    are documented in /home/ga/Desktop/quality_review.txt. This file lists 6 patients
+    with identified care gaps. For each flagged patient, address ALL identified deficiencies:
+    if a diagnosed condition is missing from the problem list, add it with the correct
+    ICD-10 code; if a prescribed medication is missing or has an incorrect dosage,
+    add or correct it; if a known allergy is undocumented, add it with the reaction
+    and severity; if the patient is overdue for a follow-up visit, schedule an appointment
+    with Dr. James Carter. For each patient where you make changes, create an encounter
+    note documenting what was remediated and why. Two of the six patients have already
+    been remediated -- verify their charts are complete but do NOT make any changes.
+    Log in as demo_provider (password: Provider1234!).'
+- id: cua_world_long_odoo_inventory_env__pharma_lot_recall_quarantine
+  env_name: odoo_inventory_env
+  task_name: pharma_lot_recall_quarantine
+  platform: linux
+  environment_sha256: 3e2817523a47f8765ac3990a489d200140b9da80d5bee1f94f21ff4e474f9a22
+  description: 'You are the Quality Assurance Manager at a pharmaceutical distribution
+    center. Vendor ''MedSource Pharma'' is under a regulatory recall. Navigate to
+    their contact record in the Contacts app and read the recall notice in their internal
+    notes to determine the affected date range and replacement vendor.
+
+
+    Then review all product lots in the Inventory app. Each lot''s description includes
+    its source vendor and receipt date. Identify lots that are both from MedSource
+    Pharma AND received within the recall date range.
+
+
+    Create a sub-location ''Quarantine - Regulatory Hold'' under WH/Stock. Transfer
+    all affected lot quantities to this quarantine location via internal transfer(s).
+
+
+    Finally, create a single confirmed Purchase Order from the replacement vendor
+    (specified in the recall notice) for the total quarantined quantity of each affected
+    product.
+
+
+    Do NOT quarantine lots from MedSource received outside the recall window. Do NOT
+    quarantine lots from other vendors. Do NOT touch products never supplied by MedSource
+    Pharma.'
+- id: cua_world_long_openclinic_ga_env__insured_consultation_billing
+  env_name: openclinic_ga_env
+  task_name: insured_consultation_billing
+  platform: linux
+  environment_sha256: db3deaee4c298c33c7438218ba09c727dbec0e17eedc1273df2fb24ddbd99a89
+  description: 'You are the billing administrator at a hospital using OpenClinic GA
+    (http://localhost:10088/openclinic). A new insurance partner has just contracted
+    with your hospital. Register it as a new insurer in the system with official name
+    ''MediShield Pan-Africa Ltd'' and language set to English. Patient Carlos Mendoza
+    (already registered, ID 10002) has presented his insurance card. Assign this insurer
+    to Carlos with policy number ''MSPA-2026-4471''. Note: Carlos has a prior uninsured
+    consultation charge already on file that predates his insurance and must remain
+    billed to the patient, not the insurer. Carlos is here today for a specialist
+    consultation. Create a service with code ''SPEC01'', description ''Specialist
+    Consultation'', price 45.00. Record today''s consultation charge against Carlos,
+    and generate an insurer invoice addressed to the new insurer that covers this
+    new charge only. Login: username ''4'', password ''openclinic''.'
+- id: cua_world_long_oracle_database_env__claims_pipeline_reconciliation
+  env_name: oracle_database_env
+  task_name: claims_pipeline_reconciliation
+  platform: linux
+  environment_sha256: 0cd2e334f468b48e994acbed84fb222463aaf0d76fc65081a4c38e3b6c721219
+  description: 'You are a DBA at a health insurance company. Quarterly claims reconciliation
+    has revealed data integrity issues. Connect to Oracle using DBeaver (host: localhost,
+    port: 1521, service: XEPDB1, user: claims_admin, password: Claims2024secure).
+
+
+    The CLAIMS_ADMIN schema contains: PROVIDERS (50 providers with active/terminated
+    status), MEMBERS (200 insured individuals with coverage periods), FEE_SCHEDULE
+    (100 procedure rate entries by provider type), CLAIMS_RAW (500 submitted claims),
+    CLAIMS_ADJUDICATED (450 processed claims), and PAYMENT_AUTHORIZATIONS (400 payments).
+
+
+    Investigate and fix all discrepancies:
+
+    1. Overpayments: approved_amount in CLAIMS_ADJUDICATED exceeding FEE_SCHEDULE.allowed_amount
+    for the claim''s procedure_code and provider type. Correct approved_amount to
+    the allowed amount.
+
+    2. Orphaned adjudications: CLAIMS_ADJUDICATED records with no matching claim_id
+    in CLAIMS_RAW. Delete them.
+
+    3. Duplicate payments: same claim_id appearing multiple times in PAYMENT_AUTHORIZATIONS.
+    Delete duplicates, keeping the lowest payment_id.
+
+    4. Eligibility violations: claims where the provider''s termination_date or member''s
+    coverage_end is before the service_date. Set claim_status to ''REJECTED''.
+
+    5. Payment cascade mismatches: PAYMENT_AUTHORIZATIONS.payment_amount not matching
+    CLAIMS_ADJUDICATED.approved_amount for the same claim. Correct payment_amount
+    to match.
+
+
+    After remediation, create: (a) a PL/SQL package CLAIMS_RECONCILIATION with a function
+    COUNT_DISCREPANCIES returning the total remaining issues across all categories
+    (should return 0 after fixes); (b) a trigger on PAYMENT_AUTHORIZATIONS that rejects
+    INSERT of a duplicate claim_id; (c) a materialized view RECONCILIATION_DASHBOARD
+    showing discrepancy counts by category. Save a reconciliation report to ~/Desktop/reconciliation_report.txt
+    listing each category with count found and count fixed.'
+- id: cua_world_long_project_libre_env__schedule_recovery_rebaseline
+  env_name: project_libre_env
+  task_name: schedule_recovery_rebaseline
+  platform: linux
+  environment_sha256: ee39565cd49821083225a01b5591cf9c745967761b4e875327363c5b7fe0367e
+  description: A Commercial Construction project for a three-story office building
+    is open in ProjectLibre. The project has experienced a foundation phase delay
+    and requires schedule recovery. Set the project Status Date to February 15, 2000
+    and mark 'Cure piers and foundations' (row 42) as 100% complete. Reduce the duration
+    of 'Strip column piers and foundation forms' (row 44) to 3 days to reflect an
+    added crew, and set a 'Start No Earlier Than' constraint of March 1, 2000 on 'Erect
+    steel columns, beams and joist - 1st and 2nd floors' (row 48) due to a steel delivery
+    delay. Insert a 0-day milestone named 'Foundation Remediation Inspection' immediately
+    after 'Prepare and pour concrete floor in elevator pit' (row 46) with a Finish-to-Start
+    predecessor link from that task, and assign the resource 'G.C. Project Management'
+    to it. Set the project baseline to capture the recovery plan and save the project
+    as /home/ga/Projects/output/schedule_recovery.xml.
+- id: cua_world_long_pymol_env__kinase_selectivity_comparison
+  env_name: pymol_env
+  task_name: kinase_selectivity_comparison
+  platform: linux
+  environment_sha256: 859fab6067722050579dfd5a46c107a4ac48065d7236e2d688c3b608930b7f27
+  description: 'You are a computational pharmacologist analyzing why imatinib selectively
+    inhibits ABL kinase over related kinases EGFR and CDK2. Load ABL with imatinib
+    (PDB: 1IEP), EGFR with erlotinib (PDB: 1M17), and CDK2 with Cyclin A (PDB: 1FIN).
+
+
+    Structurally superimpose all three kinase domains and record pairwise RMSD values.
+
+
+    Identify the drug binding pocket in each kinase: select all protein residues within
+    5 Angstroms of the ligand for ABL (ligand residue name STI) and EGFR (ligand residue
+    name AQ4), or within 5 Angstroms of the catalytic lysine for CDK2.
+
+
+    Perform a binding pocket conservation analysis: for each ABL pocket residue, use
+    the structural alignment to find the equivalent position in EGFR and CDK2, compare
+    amino acid types, and classify each position as conserved (identical amino acid
+    in all three kinases) or divergent. Color conserved pocket residues on ABL in
+    blue and divergent residues in red.
+
+
+    Identify the gatekeeper residue and DFG motif conformation (DFG-in or DFG-out)
+    in each kinase. Measure the CA-CA distance from gatekeeper to DFG-phenylalanine,
+    and the catalytic lysine NZ to C-helix glutamate OE1 distance, in each structure.
+
+
+    Save a ray-traced figure at 2400x1800 resolution to ~/PyMOL_Data/images/kinase_selectivity.png
+    showing all three superimposed kinases with conservation-colored pockets, DFG
+    motifs as sticks, and ligands as spheres.
+
+
+    Write a report to ~/PyMOL_Data/kinase_selectivity_report.txt with: pairwise RMSDs,
+    each pocket residue''s conservation status and equivalent amino acids, gatekeeper
+    and DFG analysis, all distances, and a structural rationale for imatinib''s ABL
+    selectivity.'
+- id: cua_world_long_redmine_env__q1_milestone_reconciliation
+  env_name: redmine_env
+  task_name: q1_milestone_reconciliation
+  platform: linux
+  environment_sha256: df251ecde2fdeabd2cf91bc8fa8c048bc06ba3435db5ea8267e8254283a794a7
+  description: 'You are the Engineering Director at DevLabs. Q1 2025 has ended and
+    you must formally reconcile the ''Q1 2025 Goals'' milestone in the Infrastructure
+    & DevOps project. Audit all issues in the ''Q1 2025 Goals'' milestone: classify
+    each as completed (status Closed or Resolved) or incomplete (any other status),
+    and determine the total estimated hours and total hours actually spent across
+    all Q1 issues. Create a wiki page titled ''Q1_2025_Retrospective'' in the Infrastructure
+    & DevOps project with three sections: a ''Milestone Summary'' section listing
+    total issue count, completed count, incomplete count, total estimated hours, and
+    total spent hours; a ''Carryover Items'' section listing each incomplete issue''s
+    subject and current assignee; and a ''Risk Assessment'' section identifying the
+    highest-priority incomplete issue as the primary risk for Q2. Move every incomplete
+    Q1 2025 Goals issue to the ''Q2 2025 Goals'' milestone, adding the note ''Carried
+    over from Q1: delivery incomplete, re-prioritized for Q2.'' to each. Set the ''Q1
+    2025 Goals'' version status to Closed. Finally, on whichever Q1 issue had the
+    most total hours logged against it, add the note: ''Q1 Retro: Highest effort item
+    at X hours. Recommend decomposition into smaller deliverables for Q2.'' where
+    X is the actual total hours spent on that issue. Login credentials: admin / Admin1234!'
+- id: cua_world_long_rocket_chat_env__compliance_audit_remediation
+  env_name: rocket_chat_env
+  task_name: compliance_audit_remediation
+  platform: linux
+  environment_sha256: 9e262ccaa10485e927b798acf9ce106c3f93f0e417d2cadb62af1cdba84417fb
+  description: 'You are the IT Security & Compliance Manager. Rocket.Chat is open
+    at the login screen in the browser. Log in with username: admin and password:
+    Admin1234! -- you need full administrator access for this task.
+
+
+    An internal compliance audit has identified critical policy violations in this
+    workspace requiring immediate remediation.
+
+
+    Review the audit findings in #compliance-audit-findings for the complete list
+    of violations and required actions. Cross-reference with #it-security-policy for
+    exact policy requirements, configuration thresholds, and any required text content.
+    Consult #hr-operations for the current organizational structure and department
+    assignments.
+
+
+    Remediate all findings. The violations span channel access control, channel privacy
+    classification, data retention and file upload governance, and compliance reporting
+    infrastructure. Each finding references the specific policy it violates -- consult
+    those policies in #it-security-policy for the exact values and text you need.
+
+
+    After completing all remediations, create a private channel compliance-remediation-log-q1-2026
+    with members ciso, compliance.officer, and legal.counsel. Post and pin a structured
+    remediation report documenting each finding addressed, the specific action taken,
+    and the current status. Post a brief compliance status update in #executive-updates
+    confirming all remediations are complete.'
+- id: cua_world_long_snap_env__multicriteria_suitability_mapping
+  env_name: snap_env
+  task_name: multicriteria_suitability_mapping
+  platform: linux
+  environment_sha256: 25a4167f58b13011c6ca56dfabbfd5403c0200eb5f47933193105b3bcd6aba5f
+  description: 'A land-use planner needs to identify sites suitable for development
+    by combining satellite vegetation data with terrain elevation. Using ''landsat_multispectral.tif''
+    (SWIR1=B1, NIR=B2, Red=B3, Green=B4) and ''srtm_dem.tif'' (single band: elevation)
+    from ~/snap_data/, collocate both datasets into a single product with the Landsat
+    image as the master. Create a virtual band named ''NDVI'' computing the Normalized
+    Difference Vegetation Index from NIR and Red bands, and a virtual band named ''suitability_class''
+    that classifies each pixel: value 3 (Suitable) where NDVI > 0.3 and elevation
+    < 500, value 2 (Marginal) where NDVI > 0.15 and elevation < 800, and value 1 (Unsuitable)
+    for all remaining pixels. Create a 200x200 pixel spatial subset (pixel coordinates
+    100 to 299 in both X and Y). Save the full collocated product as BEAM-DIMAP to
+    ~/snap_projects/suitability_assessment.dim and export the spatial subset as GeoTIFF
+    to ~/snap_exports/suitability_subset.tif.'
+- id: cua_world_long_splunk_env__threat_intel_enrichment_pipeline
+  env_name: splunk_env
+  task_name: threat_intel_enrichment_pipeline
+  platform: linux
+  environment_sha256: 61b4e817dab7e5121ac9822e8cdf264d50135d741c0e551a98486f7c0bf36f65
+  description: 'Your security team needs a threat intelligence enrichment pipeline
+    in Splunk (http://localhost:8000, admin/SplunkAdmin1!). Analyze failed authentication
+    attempts (''Failed password'') in the security_logs index, aggregate by source
+    IP, and classify each IP''s threat level: ''critical'' (count > 500), ''high''
+    (count > 100), ''medium'' (count > 20), or ''low'' (otherwise). Save the results
+    — with fields src_ip, attempt_count, and threat_level — as a CSV lookup file named
+    threat_intel.csv. Create a file-based lookup definition named threat_intel_lookup
+    in the search app pointing to threat_intel.csv. Create an automatic lookup named
+    threat_auto_enrich on sourcetype linux_secure that uses threat_intel_lookup, matching
+    src_ip as both input and lookup field, outputting threat_level and attempt_count.
+    Build a Classic Dashboard named Threat_Intelligence_Monitor with a time range
+    picker and at least three panels: a table of recent security_logs events enriched
+    with threat_level and attempt_count, a timechart of event counts by threat_level
+    over time, and a stats table showing top 10 source IPs ranked by attempt_count
+    with their threat classification. Create a scheduled alert named Critical_Threat_Activity
+    (cron: */15 * * * *) that triggers on events in security_logs from IPs classified
+    as threat_level=''critical''.'
+- id: cua_world_long_sumo_env__optimize_network_signal_timing
+  env_name: sumo_env
+  task_name: optimize_network_signal_timing
+  platform: linux
+  environment_sha256: ffa6b98b12183c478bcde208f88e64b2b26aac17299570cc2822fe3ce68eb3b2
+  description: 'You are a traffic signal engineer at the Municipality of Bologna.
+    The Pasubio corridor''s traffic signals were recently reset to an equal-green-split
+    configuration during a controller upgrade, causing widespread intersection delays.
+    Your task is to restore efficient signal operation by redesigning timing plans
+    based on actual traffic demand.
+
+
+    Using the Bologna Pasubio scenario at /home/ga/SUMO_Scenarios/bologna_pasubio/,
+    run the baseline simulation with edge-level mean data collection (300-second aggregation
+    intervals). Compute per-intersection average vehicle delay by comparing measured
+    edge travel times against free-flow travel times (edge_length / speed_limit) on
+    approach edges to each signalized intersection. Identify the three intersections
+    with the highest average delay.
+
+
+    For these three intersections, analyze traffic demand on each approach from the
+    route files and redesign signal timing with demand-proportional green phase durations.
+    Maintain minimum 5-second green per phase and keep cycle lengths between 60 and
+    150 seconds. Leave all other intersections unchanged.
+
+
+    Create an optimized TLS file at /home/ga/SUMO_Scenarios/bologna_pasubio/pasubio_tls_optimized.add.xml
+    and a simulation config at /home/ga/SUMO_Scenarios/bologna_pasubio/run_optimized.sumocfg
+    referencing it. Run the optimized scenario with the same edge-data collection.
+
+
+    Produce a comparison report at /home/ga/SUMO_Output/intersection_optimization_report.csv
+    with columns: junction_id, baseline_delay_s, optimized_delay_s, improvement_pct.
+    Each of the three targeted intersections must show at least 25% delay reduction.'
+- id: cua_world_long_thunderbird_env__litigation_email_triage
+  env_name: thunderbird_env
+  task_name: litigation_email_triage
+  platform: linux
+  environment_sha256: bc392e09acaa6438c61fadeabe58448aafaf9c81ecea64dc8c8ad931bfe6133e
+  description: 'You are a paralegal at Whitmore & Associates managing emails for the
+    active "Meridian Corp v. Apex Industries" litigation. Your inbox has 15 emails,
+    most with generic subjects like "Re: Follow-up", "Documents Attached", or "FYI"
+    that do not indicate the category. You must read each email''s body to classify
+    it.
+
+
+    Create a folder called "Meridian_v_Apex" under Local Folders with three subfolders:
+    "Pleadings" (court filings and motions), "Discovery" (document requests, depositions,
+    interrogatories), and "Billing" (invoices and cost reports). Read each email and
+    move it to the correct subfolder based on its body content. Leave the two non-case
+    emails (firm-wide announcements) in the Inbox. Note: several senders have emails
+    across multiple categories, so you cannot route by sender alone.
+
+
+    Set up two message filters for ongoing case email management:
+
+    1. "Discovery Alerts": If Subject contains "Interrogatory" OR Subject contains
+    "Deposition" OR Subject contains "Document Request" then move to Meridian_v_Apex/Discovery
+    and tag as Important.
+
+    2. "Billing Auto-File": If From contains "@legalcosts" AND Subject does NOT contain
+    "URGENT" then move to Meridian_v_Apex/Billing and mark as Read.
+
+
+    Add opposing counsel Rebecca Torres to the address book using the contact details
+    found in her email signature (name, title, firm, email, and phone number).
+
+
+    Finally, draft a reply to Torres''s supplemental document request email, acknowledging
+    receipt and confirming your team will provide the requested documents by the deadline
+    stated in her email. Save the draft without sending.'
+- id: cua_world_long_wireshark_env__web_app_breach_investigation
+  env_name: wireshark_env
+  task_name: web_app_breach_investigation
+  platform: linux
+  environment_sha256: 687af87347a3d0d85c405985c5b9dc445c6370b97d3fce2ca4a190a52a87e1f2
+  description: 'You are a SOC analyst investigating a web application breach. A packet
+    capture /home/ga/Documents/captures/incident_capture.pcapng is already open in
+    Wireshark. The capture contains traffic from multiple hosts, including both legitimate
+    users and an attacker who compromised the web application and then exfiltrated
+    data to a separate server.
+
+
+    Investigate the full attack chain and save your findings to /home/ga/Documents/incident_report.txt
+    using exactly this format:
+
+
+    INCIDENT REPORT
+
+    ================
+
+    ATTACKER_IP: <source IP of the attacker>
+
+    WEBSERVER_IP: <IP of the compromised web application server>
+
+    FAILED_LOGINS: <number of failed login attempts before the successful one>
+
+    VALID_CREDENTIALS: <username:password from the successful login>
+
+    WEBSHELL_FILENAME: <name of the malicious file uploaded by the attacker>
+
+    COMMANDS_EXECUTED: <comma-separated list of OS commands run via the webshell,
+    in chronological order>
+
+    EXFIL_SERVER_IP: <IP of the server that received the stolen data>
+
+    EXFIL_BYTES: <total application-layer bytes sent from the attacker to the exfil
+    server>
+
+
+    All values must come directly from the packet data. Examine every protocol layer
+    carefully.'
+- id: cua_world_long_wondershare_edrawmax_env__healthcare_it_architecture_review
+  env_name: wondershare_edrawmax_env
+  task_name: healthcare_it_architecture_review
+  platform: linux
+  environment_sha256: 66335a649751d349936630bc6f93b95bffa7c2084a265fbaa5c6686840494520
+  description: 'You are a systems architect at ClearMed, a healthcare technology company.
+    Create a 2-page system architecture document in EdrawMax.
+
+
+    Page 1 — "ClearMed System Architecture":
+
+    Create a system architecture diagram showing a load balancer at the top connecting
+    to 3 web applications: Patient Portal (React / Nginx), Provider Dashboard (Angular
+    / Nginx), and Admin Console (Vue.js / Nginx). All 3 applications connect down
+    to a central API Gateway (Kong). The API Gateway connects to 4 backend microservices:
+    Authentication Service (Node.js), EHR Records Service (Java / Spring Boot), Billing
+    Service (Python / Django), and Analytics Service (Go). Show two databases at the
+    bottom: PostgreSQL (connected to EHR Records and Billing services) and MongoDB
+    (connected to Authentication and Analytics services). Include an external integration
+    "HL7 FHIR Gateway" as a cloud shape connected to EHR Records Service. Label every
+    component with its name and technology stack.
+
+
+    Page 2 — "Patient Admission Workflow":
+
+    Create a cross-functional swimlane flowchart for patient admission with 3 lanes:
+    Front Desk, Clinical Staff, and Billing Department. Start with "Patient Arrives"
+    and end with "Admission Complete." Include at least 12 process steps and 3 decision
+    diamonds: "Insurance Verified?", "Pre-authorization Required?", and "Room Available?".
+    Show the flow through registration, triage, insurance verification, clinical assessment,
+    room assignment, and billing setup.
+
+
+    Save as /home/ga/Documents/clearmed_architecture.eddx and export Page 1 as PNG
+    to /home/ga/Documents/clearmed_architecture.png.'
+- id: cua_world_long_woo_commerce_env__launch_coffee_product_line
+  env_name: woo_commerce_env
+  task_name: launch_coffee_product_line
+  platform: linux
+  environment_sha256: 8869ce2f32b6448edada8e6b8b7b8603a875bd002ad1d330ce141ffa41cb952b
+  description: 'You are the e-commerce manager launching a new "Artisan Coffee Collection"
+    product line for your WooCommerce store. This involves setting up the full product
+    catalog, fulfillment logistics, a promotional campaign, and processing an initial
+    order.
+
+
+    Create a product category hierarchy with a parent category "Artisan Coffee" and
+    a subcategory "Single Origin".
+
+
+    Create and publish a variable product named "Ethiopian Yirgacheffe Coffee" (SKU:
+    EYC-001) in the "Single Origin" category. It should have two attributes used for
+    variations: "Roast Level" (Light, Medium, Dark) and "Size" (250g, 500g, 1kg) —
+    9 variations total. Set regular prices by size across all roast levels: 250g =
+    $14.99, 500g = $24.99, 1kg = $39.99. Enable stock management for every variation
+    with these quantities: Light/250g: 50, Light/500g: 30, Light/1kg: 20, Medium/250g:
+    60, Medium/500g: 40, Medium/1kg: 25, Dark/250g: 45, Dark/500g: 35, Dark/1kg: 15.
+    Add "Organic Cotton T-Shirt" as a cross-sell.
+
+
+    Create a shipping class named "Fragile Items" (slug: fragile-items, description:
+    "Products requiring careful handling during transit.") and assign it to the Ethiopian
+    Yirgacheffe Coffee product.
+
+
+    Create a coupon code "COFFEE15" as a fixed cart discount of $5.00 with minimum
+    spend $25.00, usage limit 200, restricted to the "Single Origin" category, expiry
+    date 2026-12-31.
+
+
+    Create a manual order for customer Emily Chen (emily.chen@example.com), billing
+    state NY, containing 2x Ethiopian Yirgacheffe Coffee (Medium/500g) and 1x Wireless
+    Bluetooth Headphones. Add a private note "Expedited shipping requested - fragile
+    items included" and set the order status to Processing.'
+- id: cua_world_long_wordpress_env__launch_woocommerce_coffee_roastery
+  env_name: wordpress_env
+  task_name: launch_woocommerce_coffee_roastery
+  platform: linux
+  environment_sha256: bde31137822165e8d7745ba57aca2bd70f25f0a728e95b0038f4cc6dfc2c76fc
+  description: 'You are launching the online store for "Summit Roasters," a specialty
+    coffee roastery. WooCommerce is installed but inactive. The store configuration
+    is at ~/Documents/Store_Launch/store_brief.txt and the product catalog is at ~/Documents/Store_Launch/product_catalog.csv.
+
+
+    Activate WooCommerce and configure all store settings from the brief, including
+    store address, currency, tax rate, a shipping zone with its methods, and a promotional
+    coupon. Create the product category hierarchy from the CSV with proper parent-child
+    relationships, and create the product attribute described in the brief.
+
+
+    Add all 6 products from the CSV with their exact names, SKUs, descriptions, and
+    correct categories. Coffee products marked "variable" must be created as WooCommerce
+    Variable Products with the attribute as variations, using the per-size prices
+    from the CSV. Equipment products marked "simple" use regular pricing.'
+- id: cua_world_long_wps_presentation_env__rebrand_restructure_pitch_deck
+  env_name: wps_presentation_env
+  task_name: rebrand_restructure_pitch_deck
+  platform: linux
+  environment_sha256: b086c88942a24ea9aaf28e63eadd460902f4ece243397d26079ee67c2968c4fc
+  description: 'You are a management consultant at a firm that has just rebranded
+    from ''Apex Consulting Partners'' to ''Meridian Strategy Group''. Open the client
+    pitch deck at /home/ga/Documents/presentations/apex_pitch_deck.pptx and read the
+    update memo at /home/ga/Desktop/deck_update_memo.txt. The memo details six required
+    changes before the NovaTech board presentation tomorrow: rebrand the company name
+    throughout the deck, correct revenue data in the case study table, restructure
+    the deck to lead with the team section, add a new summary slide with a key metrics
+    table, apply a confidentiality footer, and save to a new file. Complete all changes
+    per the memo and save as /home/ga/Documents/presentations/meridian_pitch_final.pptx
+    without modifying the original.'

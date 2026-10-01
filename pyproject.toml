@@ -1,0 +1,139 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "cua-speedrun"
+version = "0.3.14"
+description = "A benchmark and leaderboard for the speed of computer-use agents"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "dbus-next>=0.2.3",
+    "fastapi>=0.115",
+    "huggingface-hub>=0.35.0",
+    "itsdangerous>=2.2",
+    "jinja2>=3.1",
+    "jsonschema>=4.20",
+    "modal>=1.5.5",
+    "numpy>=1.26",
+    "paramiko>=3.4",
+    "Pillow>=10.0",
+    "pycryptodome>=3.20",
+    "python-dotenv",
+    "python-multipart>=0.0.9",
+    "requests>=2.31",
+    "rich>=13.0",
+    "sqlalchemy>=2.0",
+    "textual>=8.2,<9",
+    "uv==0.10.2",
+    "uvicorn[standard]>=0.30",
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+all = ["cua-speedrun[osworld]"]
+gym = [
+    "dbus-next>=0.2.3",
+    "jsonschema>=4.20",
+    "numpy>=1.26",
+    "paramiko>=3.4",
+    "Pillow>=10.0",
+    "pycryptodome>=3.20",
+    "rich>=13.0",
+]
+modal = [
+    "modal>=1.5.5",
+]
+dev = [
+    "pytest>=8.0",
+    # Starlette's TestClient still uses httpx's pre-0.28 app constructor.
+    "httpx>=0.27,<0.28",
+]
+osworld = [
+    "beautifulsoup4",
+    "borb<3",
+    "chardet",
+    "cssselect",
+    "easyocr",
+    "fastdtw",
+    "formulas",
+    "gdown",
+    "gymnasium~=0.28.1",
+    "ImageHash",
+    "librosa",
+    "lxml",
+    "mutagen",
+    "numpy",
+    "odfpy",
+    "opencv-python-headless",
+    "openpyxl",
+    "pandas",
+    "paramiko",
+    "pdfplumber",
+    "Pillow",
+    "playwright",
+    "pyacoustid",
+    "pydrive",
+    "pymupdf",
+    "pypdf",
+    "pypdf2",
+    "pygame",
+    "python-docx",
+    "python-dotenv",
+    "python-pptx",
+    "pytz",
+    "rapidfuzz",
+    "requests-toolbelt~=1.0.0",
+    "scikit-image",
+    "scipy",
+    "tldextract",
+    "xmltodict",
+]
+platform = [
+    "fastapi>=0.115",
+    "uvicorn[standard]>=0.30",
+    "sqlalchemy>=2.0",
+    "jinja2>=3.1",
+    "python-multipart>=0.0.9",
+    "itsdangerous>=2.2",
+    "uv==0.10.2",
+]
+
+[project.scripts]
+cua-speedrun = "cua_speedrun.cli:main"
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.hatch.build.targets.wheel]
+packages = [
+    "src/cua_speedrun",
+    "third_party/gym-anything/src/gym_anything",
+]
+
+[tool.hatch.build.targets.wheel.force-include]
+"catalog" = "cua_speedrun/_resources/catalog"
+"agents" = "cua_speedrun/_resources/agents"
+"scripts" = "cua_speedrun/_resources/scripts"
+"benchmarks" = "cua_speedrun/_resources/benchmarks"
+"third_party/gym-anything/benchmarks/cua_world/environments/preset_gnome_systemd/env.json" = "cua_speedrun/_resources/gym-anything/benchmarks/cua_world/environments/preset_gnome_systemd/env.json"
+"third_party/gym-anything/benchmarks/cua_world/environments/preset_gnome_systemd/tasks" = "cua_speedrun/_resources/gym-anything/benchmarks/cua_world/environments/preset_gnome_systemd/tasks"
+"third_party/gym-anything/LICENSE" = "cua_speedrun/_resources/gym-anything/LICENSE"
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/README.md",
+    "src/cua_speedrun",
+    "/catalog",
+    "/agents",
+    "/scripts",
+    "/benchmarks",
+    "third_party/gym-anything/src/gym_anything",
+    "third_party/gym-anything/benchmarks/cua_world/environments/preset_gnome_systemd",
+    "third_party/gym-anything/LICENSE",
+]
+exclude = [
+    "**/__pycache__",
+    "**/*.pyc",
+]

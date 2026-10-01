@@ -1,0 +1,140 @@
+{% extends "layout.html" %}
+{% block title %}Compare results · cua-speedrun{% endblock %}
+{% block content %}
+{% if comparison_error %}
+<section class="compare-error">
+  <h1>Cannot compare these results</h1>
+  <p>{{ comparison_error }}</p>
+  <a class="btn" href="/">Return to Frontier</a>
+</section>
+{% else %}
+<header class="page-header">
+  <div><h1>Compare results</h1><p>{{ comparison.entries | length }} published results from the same track and season.</p></div>
+  <div class="page-actions"><a class="btn secondary" href="/?track={{ comparison.track_name | urlencode }}&amp;season={{ comparison.season_key | urlencode }}">Frontier</a></div>
+</header>
+
+<section class="compare-lock" aria-label="Comparison boundary">
+  <div><span class="instrument-label">Track</span><strong>{{ comparison.track_label }}</strong><small>{{ comparison.track_name }}</small></div>
+  <div><span class="instrument-label">Exact season</span><strong>{{ comparison.contract.fields[1].value if comparison.contract.fields | length > 1 else "Frozen contract" }}</strong><small>{{ comparison.season_key }}</small></div>
+  <div class="compare-lock-mark"><span>Comparison rule</span><b>Same contract only</b></div>
+</section>
+
+<section class="compare-section" aria-labelledby="aggregate-title">
+  <div class="section-heading">
+    <div><h2 id="aggregate-title">Summary</h2></div>
+    <p>{{ comparison.baseline_rule }}</p>
+  </div>
+  <div class="compare-scroll">
+    <div class="compare-board" style="--compare-count: {{ comparison.entries | length }}">
+      <div class="compare-row compare-entry-row">
+        <div class="compare-axis"><span>Selected points</span></div>
+        {% for entry in comparison.entries %}
+        <article class="compare-entry-card{% if entry.baseline %} baseline{% endif %}">
+          <span class="compare-index">0{{ loop.index }}</span>
+          <a href="/entries/{{ entry.entry_id }}">{{ entry.entry_name }}</a>
+          <small>{{ entry.submission_fingerprint[:12] }}</small>
+          <div class="compare-chips">
+            {% if entry.baseline %}<span class="chip live">baseline</span>{% endif %}
+            <span class="chip {% if entry.insight.frontier %}frontier{% elif entry.meets_success_bar %}pass{% else %}fail{% endif %}">{{ entry.insight.label }}</span>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+
+      <div class="compare-row emphasis">
+        <div class="compare-axis"><b>Total clock</b><small>lower is better</small></div>
+        {% for entry in comparison.entries %}
+        <div class="compare-value major">
+          <strong>{{ "%.2f" | format(entry.total_time_sec) }}<i>s</i></strong>
+          {% if entry.baseline %}<span>baseline</span>
+          {% else %}<span class="delta {% if entry.delta_sec > 0 %}slower{% else %}faster{% endif %}">{{ "%+.2f" | format(entry.delta_sec) }}s</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="compare-row">
+        <div class="compare-axis"><b>Success</b><small>bar {{ "%.0f" | format(comparison.success_bar * 100) }}%</small></div>
+        {% for entry in comparison.entries %}
+        <div class="compare-value">
+          <strong>{{ "%.0f" | format(entry.success_rate * 100) }}<i>%</i></strong>
+          <span>{{ entry.num_passed }}/{{ entry.num_runs }} passed</span>
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="compare-row">
+        <div class="compare-axis"><b>Clock attribution</b><small>descriptive split</small></div>
+        {% for entry in comparison.entries %}
+        <div class="compare-value clock-compare">
+          {% if entry.clock.available %}
+          <div class="clock-track"><span class="agent" style="width:{{ entry.clock.agent_percent }}%"></span><span class="environment" style="width:{{ entry.clock.env_percent }}%"></span></div>
+          <span>agent {{ "%.0f" | format(entry.clock.agent_percent) }}% · env {{ "%.0f" | format(entry.clock.env_percent) }}%</span>
+          <small>{{ entry.clock.label }}</small>
+          {% else %}<span>not reported</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+
+      <div class="compare-row">
+        <div class="compare-axis"><b>Median task</b><small>within each result</small></div>
+        {% for entry in comparison.entries %}
+        <div class="compare-value"><strong>{% if entry.median_task_time_sec is not none %}{{ "%.2f" | format(entry.median_task_time_sec) }}<i>s</i>{% else %}—{% endif %}</strong><span>{{ entry.steps }} total steps</span></div>
+        {% endfor %}
+      </div>
+    </div>
+  </div>
+</section>
+
+<section class="compare-section" aria-labelledby="tasks-title">
+  <div class="section-heading">
+    <div><h2 id="tasks-title">Task comparison</h2></div>
+    <p>{% if comparison.seed_mismatch_count %}{{ comparison.seed_mismatch_count }} task {{ "group has" if comparison.seed_mismatch_count == 1 else "groups have" }} different seed sets; their deltas are intentionally withheld.{% else %}All displayed task instances use matching scored seeds.{% endif %}</p>
+  </div>
+  {% if comparison.task_groups %}
+  <div class="compare-scroll task-compare-scroll">
+    <div class="task-compare" style="--compare-count: {{ comparison.entries | length }}">
+      <div class="compare-row task-column-head">
+        <div class="compare-axis">Task / seed</div>
+        {% for entry in comparison.entries %}<div><span>0{{ loop.index }}</span>{{ entry.entry_name }}</div>{% endfor %}
+      </div>
+      {% for group in comparison.task_groups %}
+      <div class="task-group-head">
+        <div><b>{{ group.task_id }}</b>{% if group.seed_comparable %}<span class="chip pass">seed matched</span>{% else %}<span class="chip warn">different seeds</span>{% endif %}</div>
+        {% if not group.seed_comparable %}<small>Directional totals only. No task delta is calculated.</small>{% endif %}
+      </div>
+      {% for row in group.rows %}
+      <div class="compare-row task-compare-row{% if not group.seed_comparable %} mismatch{% endif %}">
+        <div class="compare-axis">
+          {% if group.seed_comparable %}<b>seed {{ row.seed }}</b><small>same instance</small>{% else %}<b>seed sets differ</b><small>not paired</small>{% endif %}
+        </div>
+        {% for cell in row.cells %}
+        <div class="task-compare-cell">
+          {% if cell.present %}
+            {% if group.seed_comparable %}
+            <div><strong>{% if cell.time_sec is not none %}{{ "%.2f" | format(cell.time_sec) }}s{% else %}—{% endif %}</strong>{% if cell.passed %}<span class="chip pass">pass</span>{% else %}<span class="chip fail">fail</span>{% endif %}</div>
+            {% if not cell.baseline and cell.delta_sec is not none %}<span class="delta {% if cell.delta_sec > 0 %}slower{% elif cell.delta_sec < 0 %}faster{% endif %}">{{ "%+.2f" | format(cell.delta_sec) }}s vs baseline</span>{% elif cell.baseline %}<span>baseline instance</span>{% endif %}
+            <small>{% if cell.agent_time_sec is not none %}agent {{ "%.2f" | format(cell.agent_time_sec) }}s{% endif %}{% if cell.agent_time_sec is not none and cell.env_time_sec is not none %} · {% endif %}{% if cell.env_time_sec is not none %}env {{ "%.2f" | format(cell.env_time_sec) }}s{% endif %}</small>
+            {% else %}
+            <div><strong>{% if cell.time_sec is not none %}{{ "%.2f" | format(cell.time_sec) }}s{% else %}—{% endif %}</strong><span>{{ cell.passed }}/{{ cell.runs }} passed</span></div>
+            <span>seeds {{ cell.seed_list }}</span><small>unpaired aggregate · no delta</small>
+            {% endif %}
+          {% else %}<span>not measured</span>{% endif %}
+        </div>
+        {% endfor %}
+      </div>
+      {% endfor %}
+      {% endfor %}
+    </div>
+  </div>
+  {% else %}<p class="empty">No task summaries are stored for these entries.</p>{% endif %}
+</section>
+
+<details class="contract-inspector comparison-contract">
+  <summary><span><b>Execution contract</b><small>Shared by every result in this comparison.</small></span></summary>
+  <div class="contract-body">
+    <dl class="contract-grid">{% for field in comparison.contract.fields %}<div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>{% endfor %}</dl>
+    <div class="contract-season"><span>Season key</span><code>{{ comparison.season_key }}</code></div>
+  </div>
+</details>
+{% endif %}
+{% endblock %}

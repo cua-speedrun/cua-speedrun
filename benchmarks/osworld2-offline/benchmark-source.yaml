@@ -1,0 +1,144 @@
+schema_version: 1
+prepare:
+  default_environment: modal-native
+  forward_env: [HF_TOKEN]
+  parallel: [modal-native]
+  modal-native:
+  - script: scripts/prepare_osworld2_modal.py
+    args: [--assets-only]
+  - script: scripts/import_desktop_image.py
+    args: [--image, osworld2, --benchmark, '{benchmark}']
+  modal:
+  - script: scripts/prepare_osworld2_modal.py
+name: osworld2-offline
+version: 2026.06.24
+description: The 63-task offline OSWorld2 benchmark.
+source_benchmark:
+  release: osworld-v2-2026.06.24
+  code:
+    repository: https://github.com/xlang-ai/OSWorld-V2
+    tag: v2026.06.24
+    commit: 2b9b7b4eb73243d557bdbf2998fe18d8e18e19c6
+    archive_sha256: 7e9c5c1f79e346373ed8ca6745c465ba5a3fe61eae72c480959447bcb8582986
+  tasks:
+    repository: xlangai/osworld_v2_tasks
+    repo_type: dataset
+    tag: v2026.06.24
+    hash_manifest_path: manifests/task_hashes.json
+    hash_manifest_sha256: 3312a7df40dbd004c300804f71c57d5a23a083d6c675082fcc34c60a37f9a76c
+    task_count: 108
+  assets:
+    repository: xlangai/osworld_v2_assets_gated
+    repo_type: dataset
+    tag: v2026.06.24
+  website:
+    repository: https://github.com/Task-Web/OSWorld-web
+    tag: v2026.06.24
+    commit: 0daaa4503e18dd882c40f73cdd5e460443e8b65b
+    hosted_suffix: web.hku.icu
+  image:
+    repository: xlangai/v2-image
+    repo_type: dataset
+    tag: v2026.06.24
+    commit: 8213366932c553e5fe758d0f2c8c8b81ffc3be8c
+    path: osworld-v2-ubuntu-x86.qcow2.zip
+    size: 14189763267
+    archive_sha256: eb737ae70b49849e24af407de6a518439a23de05a8497096a948334ce0a909aa
+  public_evaluation:
+    provider: aws
+    ami_id: ami-01017272139e01feb
+    region: us-east-1
+    host_os: Ubuntu Server 24.04 LTS
+    guest_service_ports:
+    - 3000
+    - 5000
+    - 5910
+    - 8000
+    - 8006
+    - 8080
+    - 8081
+    - 9222
+protocol:
+  max_steps: 500
+  task_timeout_sec: 39600
+  primary_score: binary_completion_at_500_steps
+  supplementary_score: partial_completion
+  screen_size:
+  - 1920
+  - 1080
+  client_user: user
+  client_password: osworld-public-evaluation
+  action_pause_sec: 3
+materializer:
+  path: scripts/import_osworld2.py
+  function: materialize
+  inputs:
+  - scripts/import_osworld2.py
+  - scripts/osworld2_adapter.py
+  - scripts/osworld2_native.py
+  - scripts/osworld2_native_delta.sh
+  - scripts/build_osworld2_modal_image.py
+tasks:
+- '001'
+- '002'
+- '004'
+- '005'
+- '010'
+- '012'
+- '013'
+- '015'
+- 018
+- '020'
+- '021'
+- '022'
+- 028
+- 029
+- '030'
+- '033'
+- 038
+- '040'
+- '042'
+- '043'
+- '044'
+- '046'
+- '047'
+- 049
+- '051'
+- '052'
+- '053'
+- '054'
+- '057'
+- 058
+- 059
+- '060'
+- '061'
+- '063'
+- '064'
+- '065'
+- '066'
+- '067'
+- 068
+- 069
+- '070'
+- '071'
+- '072'
+- '073'
+- '076'
+- 080
+- 084
+- 085
+- 086
+- 088
+- 091
+- 093
+- 094
+- 096
+- '100'
+- '101'
+- '102'
+- '103'
+- '104'
+- '105'
+- '106'
+- '107'
+- '108'

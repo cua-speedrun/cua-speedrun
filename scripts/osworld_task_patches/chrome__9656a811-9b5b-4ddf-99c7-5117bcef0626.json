@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_name": "chrome__9656a811-9b5b-4ddf-99c7-5117bcef0626",
+  "operations": [
+    {
+      "op": "replace",
+      "index": 0,
+      "value": {
+        "type": "command",
+        "parameters": {
+          "command": "echo {CLIENT_PASSWORD} | sudo -S systemctl stop packagekit.service packagekit-offline-update.service 2>/dev/null || true; deadline=$((SECONDS + 60)); while sudo fuser /var/lib/dpkg/lock-frontend /var/lib/dpkg/lock /var/lib/apt/lists/lock /var/cache/apt/archives/lock >/dev/null 2>&1; do [ $SECONDS -lt $deadline ] || { echo 'timed out waiting for apt locks'; exit 1; }; sleep 1; done; echo {CLIENT_PASSWORD} | sudo -S env DEBIAN_FRONTEND=noninteractive apt-get update && echo {CLIENT_PASSWORD} | sudo -S env DEBIAN_FRONTEND=noninteractive apt-get install -y jq",
+          "shell": true
+        }
+      }
+    }
+  ]
+}

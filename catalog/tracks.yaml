@@ -1,0 +1,7 @@
+default_track: default
+
+tracks:
+  - name: default
+    gpu: null
+    eval_algorithm: shared-agent-vllm@2
+    agents_per_evaluation: 1

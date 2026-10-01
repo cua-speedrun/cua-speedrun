@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "task_name": "multi_apps__9f3bb592-209d-43bc-bb47-d77d9df56504",
+  "operations": [
+    {
+      "op": "replace",
+      "index": 2,
+      "value": {
+        "type": "execute",
+        "parameters": {
+          "command": "for _ in $(seq 1 240); do wid=$(xdotool search --name 'video.mp4|VLC media player' 2>/dev/null | tail -n1); if [ -n \"$wid\" ]; then xdotool windowactivate --sync \"$wid\"; exit 0; fi; sleep 0.5; done; wmctrl -l; exit 1",
+          "shell": true
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+schema_version: 1
+replacements:
+- path: scripts/task_utils.sh
+  count: 4
+  old: 'DISPLAY=:1 wmctrl -r :ACTIVE: -b add,maximized_vert,maximized_horz'
+  new: 'DISPLAY=:1 wmctrl -ir "$wid" -b add,maximized_vert,maximized_horz'
+- path: scripts/install_splunk.sh
+  old: |2-
+    # Download Splunk tutorial data (Buttercup Games - real web/auth/vendor logs)
+    if download_file "https://docs.splunk.com/images/Tutorial/tutorialdata.zip" "/tmp/tutorialdata.zip" 10000; then
+        cd /opt/splunk_data/tutorial
+        unzip -o /tmp/tutorialdata.zip && echo "Tutorial data extracted"
+        rm -f /tmp/tutorialdata.zip
+    fi
+
+
+  new: |2-
+    # K26 uses the real SSH/auth/system logs below, not the optional tutorial index.
+    # The official Buttercup Games download is unavailable (HTTP 403).
+    echo "Optional Buttercup tutorial data is not included in this K26 setup."
+
+
+- path: scripts/install_splunk.sh
+  old: |2-
+    # Fallback: generate real system log data if downloads failed
+    DATA_FILE_COUNT=$(find /opt/splunk_data -type f -name "*.log" -o -name "*.csv" -o -name "*.txt" | wc -l)
+    echo "Downloaded data files: $DATA_FILE_COUNT"
+
+    if [ "$DATA_FILE_COUNT" -lt 2 ]; then
+        echo "=== Fallback: Capturing real system logs from this VM ==="
+        # Copy real system logs from the running VM as fallback data
+        cp /var/log/syslog /opt/splunk_data/syslog/vm_syslog.log 2>/dev/null || true
+        cp /var/log/auth.log /opt/splunk_data/security/vm_auth.log 2>/dev/null || true
+        cp /var/log/kern.log /opt/splunk_data/syslog/vm_kern.log 2>/dev/null || true
+        cp /var/log/dpkg.log /opt/splunk_data/syslog/vm_dpkg.log 2>/dev/null || true
+
+        # Generate realistic Apache-style access log from the install activity
+        cat > /opt/splunk_data/apache/access.log << 'ACCESSEOF'
+    192.168.1.100 - admin [27/Jan/2026:10:15:23 +0000] "GET /en-US/app/launcher/home HTTP/1.1" 200 8523 "-" "Mozilla/5.0"
+    192.168.1.100 - admin [27/Jan/2026:10:15:24 +0000] "GET /en-US/static/build/pages/enterprise/launcher.js HTTP/1.1" 200 145234 "http://localhost:8000/en-US/app/launcher/home" "Mozilla/5.0"
+    192.168.1.105 - - [27/Jan/2026:10:16:01 +0000] "GET /en-US/account/login HTTP/1.1" 200 4521 "-" "Mozilla/5.0"
+    192.168.1.105 - - [27/Jan/2026:10:16:15 +0000] "POST /en-US/account/login HTTP/1.1" 303 0 "http://localhost:8000/en-US/account/login" "Mozilla/5.0"
+    10.0.0.50 - - [27/Jan/2026:10:17:30 +0000] "GET /en-US/account/login HTTP/1.1" 200 4521 "-" "python-requests/2.28.0"
+    10.0.0.50 - - [27/Jan/2026:10:17:31 +0000] "POST /en-US/account/login HTTP/1.1" 401 1234 "-" "python-requests/2.28.0"
+    10.0.0.50 - - [27/Jan/2026:10:17:32 +0000] "POST /en-US/account/login HTTP/1.1" 401 1234 "-" "python-requests/2.28.0"
+    10.0.0.50 - - [27/Jan/2026:10:17:33 +0000] "POST /en-US/account/login HTTP/1.1" 401 1234 "-" "python-requests/2.28.0"
+    ACCESSEOF
+        echo "Fallback data generated"
+    fi
+
+
+  new: |2-
+    # Require the actual downloaded inputs; do not substitute generated logs.
+    for required in security/auth.log security/SSH.log syslog/Linux.log apache/Apache.log; do
+        if [ ! -s "/opt/splunk_data/$required" ]; then
+            echo "ERROR: Required Splunk input is missing or empty: $required"
+            exit 1
+        fi
+    done
+    echo "All four real Splunk input files are present."

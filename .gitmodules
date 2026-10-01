@@ -1,0 +1,5 @@
+[submodule "third_party/gym-anything"]
+	path = third_party/gym-anything
+	url = https://github.com/cmu-l3/gym-anything.git
+	branch = speedrun
+	ignore = dirty

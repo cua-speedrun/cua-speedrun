@@ -1,0 +1,83 @@
+{% macro navigation() -%}
+
+  <span class="nav-section">Workspace</span>
+  <a class="nav-link" href="/me" {% if active == 'me' %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 5h14M3 10h14M3 15h14"/></svg>
+    <span>Evaluations</span>
+  </a>
+  <a class="nav-link" href="/" {% if active == 'frontier' %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M3 15.5h14M4.5 13l3.2-3.4 3 1.8 4.8-6"/><circle cx="4.5" cy="13" r="1"/><circle cx="15.5" cy="5.4" r="1"/></svg>
+    <span>Results</span>
+  </a>
+  <a class="nav-link" href="/submit" {% if active == 'submit' %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M10 4v12M4 10h12"/></svg>
+    <span>New evaluation</span>
+  </a>
+
+  <span class="nav-section">Reference</span>
+  <a class="nav-link" href="/tracks" {% if active == 'tracks' %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 20 20"><path d="M4 5.5h12M4 10h12M4 14.5h12"/><circle cx="7" cy="5.5" r="1.5"/><circle cx="13" cy="10" r="1.5"/><circle cx="9" cy="14.5" r="1.5"/></svg>
+    <span>Tracks</span>
+  </a>
+  <a class="nav-link" href="/methodology" {% if active == 'methodology' %}aria-current="page"{% endif %}>
+    <svg aria-hidden="true" viewBox="0 0 20 20"><circle cx="10" cy="10" r="6.5"/><path d="M10 7v6M10 4.8v.2"/></svg>
+    <span>Methodology</span>
+  </a>
+
+{%- endmacro %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{% block title %}cua-speedrun{% endblock %}</title>
+<meta name="description" content="Run and compare computer-use agent evaluations on fixed execution contracts.">
+<meta property="og:title" content="cua-speedrun">
+<meta property="og:description" content="Computer-use agent evaluations and Pareto frontiers.">
+<meta property="og:type" content="website">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='5' fill='%2309090b'/%3E%3Cpath d='M8 21l5-6 4 3 7-9' fill='none' stroke='%238b5cf6' stroke-width='2.5'/%3E%3C/svg%3E">
+<link rel="stylesheet" href="/static/instrument.css{% if static_asset_versions %}?v={{ static_asset_versions['instrument.css'] }}{% endif %}">
+<link rel="stylesheet" href="/static/frontier.css{% if static_asset_versions %}?v={{ static_asset_versions['frontier.css'] }}{% endif %}">
+<link rel="stylesheet" href="/static/results.css">
+</head>
+<body>
+<a class="skip-link" href="#main-content">Skip to content</a>
+<div class="app-shell">
+  <aside class="sidebar" aria-label="Primary navigation">
+    <a class="brand" href="/me" aria-label="cua-speedrun evaluations">
+      <span class="brand-mark">CS</span>
+      <b>cua-speedrun</b>
+    </a>
+    <nav class="side-nav">{{ navigation() }}</nav>
+    <div class="sidebar-foot">
+      {% if user %}
+      <a class="account-link" href="/logout" title="Sign out of {{ user.handle }}">
+        <span class="account-avatar">{{ user.handle[:1] | upper }}</span>
+        <span><b>{{ user.handle }}</b><small>Sign out</small></span>
+      </a>
+      {% else %}
+      <a class="account-link" href="{{ login_url }}">
+        <span class="account-avatar">↗</span>
+        <span><b>Sign in</b><small>Run evaluations</small></span>
+      </a>
+      {% endif %}
+    </div>
+  </aside>
+
+  <header class="mobile-header">
+    <a class="mobile-brand" href="/me">cua-speedrun</a>
+    <details class="mobile-menu">
+      <summary>Menu</summary>
+      <nav>{{ navigation() }}</nav>
+      {% if user %}<a class="mobile-account" href="/logout">{{ user.handle }} · sign out</a>
+      {% else %}<a class="mobile-account" href="{{ login_url }}">Sign in</a>{% endif %}
+    </details>
+  </header>
+
+  <div class="workspace">
+    <main id="main-content">{% block content %}{% endblock %}</main>
+  </div>
+</div>
+<script src="/static/app.js{% if static_asset_versions %}?v={{ static_asset_versions['app.js'] }}{% endif %}"></script>
+</body>
+</html>

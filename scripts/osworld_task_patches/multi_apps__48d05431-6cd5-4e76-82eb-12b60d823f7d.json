@@ -1,0 +1,16 @@
+{
+  "schema_version": 1,
+  "task_name": "multi_apps__48d05431-6cd5-4e76-82eb-12b60d823f7d",
+  "operations": [
+    {
+      "op": "replace",
+      "index": 2,
+      "value": {
+        "type": "launch",
+        "parameters": {
+          "command": "gnome-terminal --title=Terminal --working-directory=/home/user"
+        }
+      }
+    }
+  ]
+}

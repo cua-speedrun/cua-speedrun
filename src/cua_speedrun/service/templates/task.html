@@ -1,0 +1,80 @@
+{% extends "layout.html" %}
+{% block title %}{{ task_id }} · run {{ run_id }} · cua-speedrun{% endblock %}
+{% block content %}
+<h1>{{ task_id }} · seed {{ seed }}</h1>
+<p class="sub">Task-level diagnostics. <a href="/runs/{{ run_id }}">Back to run {{ run_id }}</a>{% if summary %} ·
+  <span class="chip {% if summary.passed %}pass{% else %}fail{% endif %}">{{ "pass" if summary.passed else "fail" }}</span>
+  {% if summary.task_time_sec is not none %}<span class="chip">{{ "%.2f" | format(summary.task_time_sec) }}s</span>{% endif %}
+  <span class="chip muted">{{ summary.num_steps }} steps · {{ summary.num_observes }} observes</span>
+{% endif %}</p>
+
+{% if instruction %}<p class="sub"><strong>Instruction:</strong> {{ instruction }}</p>{% endif %}
+{% if verdict_detail %}<p class="sub"><strong>Verdict:</strong> {{ verdict_detail }}</p>{% endif %}
+
+{% if summary %}
+<h2>Time split</h2>
+<table class="kv">
+  <tr><td>task time (armed → done)</td><td>{{ "%.2f" | format(summary.task_time_sec or 0) }}s</td></tr>
+  <tr><td>environment time (steps + observes)</td><td>{{ "%.2f" | format(summary.env_time_sec or 0) }}s</td></tr>
+  <tr><td>agent time (thinking + network)</td><td>{{ "%.2f" | format(summary.agent_time_sec or 0) }}s</td></tr>
+</table>
+{% endif %}
+
+{% if phases %}
+<h2>Preparation phases (untimed)</h2>
+<table class="kv">
+  {% for k, v in phases.items() %}<tr><td>{{ k }}</td><td>{{ v }}</td></tr>{% endfor %}
+</table>
+{% endif %}
+
+{% if logs %}
+<h2>Logs</h2>
+<div class="log-links">
+  {% for l in logs %}<a class="log-link" href="{{ l.url }}" target="_blank">{{ l.name }}</a>{% endfor %}
+</div>
+{% endif %}
+
+<h2>Trajectory</h2>
+{% for l in logs %}
+{% if l.name == "agent.stdout" or l.name == "agent.stderr" %}
+<details class="event-inspector" data-agent-output-url="{{ l.url }}">
+  <summary>
+    <span>{{ "Agent stderr" if l.name == "agent.stderr" else "Agent stdout" }}</span>
+    <small>{{ l.name }} · full captured stream</small>
+  </summary>
+  <pre class="log" data-agent-output aria-live="polite">Open to load.</pre>
+</details>
+{% endif %}
+{% endfor %}
+{% if not has_frames %}
+<p class="empty">No screenshots were captured for this task.</p>
+{% endif %}
+<ol class="traj">
+  {% for s in steps %}
+  {% if s.kind == "observe" %}
+  <li class="traj-observe">
+    <div class="traj-n">observe{% if s.dur %} · {{ "%.2f" | format(s.dur) }}s{% endif %}</div>
+    {% if s.frame %}
+    <a href="/runs/{{ run_id }}/artifact/{{ task_id }}/{{ seed }}/{{ s.frame }}" target="_blank">
+      <img class="traj-frame" loading="lazy"
+           src="/runs/{{ run_id }}/artifact/{{ task_id }}/{{ seed }}/{{ s.frame }}"
+           alt="screenshot">
+    </a>
+    {% else %}<span class="chip muted">no frame</span>{% endif %}
+  </li>
+  {% elif s.kind == "step" %}
+  <li class="traj-step">
+    <span class="traj-arrow">↳ act{% if s.dur %} · {{ "%.2f" | format(s.dur) }}s{% endif %}</span>
+    <code class="traj-action">{{ s.actions | tojson }}</code>
+  </li>
+  {% elif s.kind == "done" %}
+  <li class="traj-done"><span class="chip live">agent marked done</span></li>
+  {% elif s.kind == "verdict" %}
+  <li class="traj-verdict">
+    <span class="chip {% if s.passed %}pass{% else %}fail{% endif %}">{{ "pass" if s.passed else "fail" }}</span>
+    <span class="traj-detail">{{ s.detail }}</span>
+  </li>
+  {% endif %}
+  {% endfor %}
+</ol>
+{% endblock %}

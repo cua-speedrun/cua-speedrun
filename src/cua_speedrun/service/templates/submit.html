@@ -1,0 +1,232 @@
+{% extends "layout.html" %}
+{% block title %}New evaluation · cua-speedrun{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><h1>New evaluation</h1><p>Choose the evaluation contract, then provide the agent that runs on it.</p></div>
+  <div class="page-actions"><a class="btn secondary" href="/tracks">Explore tracks</a><a class="btn secondary" href="/methodology">View rules</a></div>
+</header>
+
+{% if not user %}
+<section class="empty-state"><h2>Sign in required</h2><p>Sign in before starting an evaluation.</p><a class="btn" href="{{ login_url }}">Sign in</a></section>
+{% elif not tracks or not benchmarks %}
+<section class="empty-state"><h2>No evaluation contracts available</h2><p>A maintainer must register at least one track and benchmark.</p></section>
+{% else %}
+<form id="submit-form" class="evaluation-wizard" data-execution-topologies="{{ execution_topologies | tojson | forceescape }}">
+  <nav class="wizard-progress" aria-label="New evaluation steps">
+    <button type="button" class="wizard-step active" data-wizard-nav="contract" aria-current="step">
+      <span class="step-number">1</span><span><b>Track</b><small>Maintainer-defined contract</small></span>
+    </button>
+    <span class="step-connector" aria-hidden="true"></span>
+    <button type="button" class="wizard-step" data-wizard-nav="agent" disabled>
+      <span class="step-number">2</span><span><b>Agent</b><small>Your two-file submission</small></span>
+    </button>
+  </nav>
+
+  <section class="wizard-panel" data-wizard-panel="contract" aria-labelledby="track-step-title">
+    <header class="wizard-heading">
+      <span>Step 1 of 2</span>
+      <h2 id="track-step-title">Configure the evaluation</h2>
+      <p>Choose a benchmark, GPU, and execution mode. The track supplies the scoring rules and defaults.</p>
+    </header>
+
+    <fieldset class="track-choices">
+      <legend>Track</legend>
+      {% for t in tracks %}
+      {% set algorithm = t.eval_algorithm or "per-task-vllm@1" %}
+      {% set algorithm_spec = eval_algorithms[algorithm] %}
+      <label class="track-choice">
+        <input type="radio" name="track" value="{{ t.name }}"
+          data-track-label="{{ t.name }}"
+          data-track-gpu="{{ t.gpu or '' }}"
+          data-track-algorithm="{{ algorithm }}"
+          data-track-parallel-evaluations="{{ 'true' if algorithm_spec.supports_parallel_evaluations else 'false' }}"
+          data-track-agents-per-evaluation="{{ t.agents_per_evaluation or 1 }}"
+          data-track-success="{{ '%.0f' | format((t.success_bar if t.success_bar is not none else 0.9) * 100) }}%"
+          {% if t.name == selected_track or (not selected_track and loop.first) %}checked{% endif %} required>
+        <span class="track-choice-body">
+          <span class="track-choice-title"><b>{{ t.name }}</b><i aria-hidden="true"></i></span>
+          <span class="track-choice-meta">
+            <span><small>Default GPU</small>{{ t.gpu or "None" }}</span>
+            <span><small>Success bar</small>{{ "%.0f" | format((t.success_bar if t.success_bar is not none else 0.9) * 100) }}%</span>
+            <span><small>Default algorithm</small>{{ algorithm_spec.label }}</span>
+            <span><small>Agents / eval</small>{{ t.agents_per_evaluation or 1 }}</span>
+          </span>
+        </span>
+      </label>
+      {% endfor %}
+    </fieldset>
+
+    <div class="benchmark-choice">
+      <label for="gpu">GPU type (optional)</label>
+      <input type="text" name="gpu" id="gpu" placeholder="None (CPU), or e.g. L40S" autocomplete="off">
+      <p>Leave blank for CPU execution. A selected GPU is allocated to each isolated model/agent replica.</p>
+    </div>
+
+    <div class="benchmark-choice">
+      <label for="eval_algorithm">Execution mode</label>
+      <select name="eval_algorithm" id="eval_algorithm">
+        {% for key, algorithm in eval_algorithms.items() %}
+        <option value="{{ key }}" data-parallel-evaluations="{{ 'true' if algorithm.supports_parallel_evaluations else 'false' }}">{{ algorithm.label }}</option>
+        {% endfor %}
+      </select>
+    </div>
+
+    <label class="parallel-evaluations" data-parallel-evaluations>
+      <span>
+        <span class="gpu-allocation-label">Execution scale</span>
+        <strong data-parallel-title>1 parallel evaluation</strong>
+        <small data-parallel-description>One agent per isolated evaluation.</small>
+      </span>
+      <span class="parallel-count">
+        <input type="number" name="parallel_evaluations" value="1" min="1" {% if max_parallel_evaluations != -1 %}max="{{ max_parallel_evaluations }}" {% endif %}step="1" inputmode="numeric" aria-label="Parallel evaluations">
+        <b>parallel</b>
+      </span>
+    </label>
+
+    <div class="benchmark-choice">
+      <label for="benchmark_id">Benchmark version</label>
+      <select name="benchmark_id" id="benchmark_id" required>
+        {% for b in benchmarks %}<option value="{{ b.id }}" data-benchmark-name="{{ b.name }}" data-benchmark-label="{{ b.name }} @ {{ b.version }} · {{ b.task_count or '?' }} tasks" {% if b.name == selected_benchmark or (not selected_benchmark and loop.first) %}selected{% endif %}>{{ b.name }} @ {{ b.version }} · {{ b.task_count or '?' }} tasks</option>{% endfor %}
+      </select>
+      <p>Only maintainer-registered benchmark versions are available. The selected version becomes part of the frozen run contract.</p>
+    </div>
+
+    <div class="placement-grid">
+      <fieldset class="execution-choices">
+        <legend>Model and agent</legend>
+        <label class="execution-choice">
+          <input type="radio" name="compute_placement" value="local"
+            data-placement-label="Local" required>
+          <span class="execution-choice-body">
+            <span class="execution-choice-heading"><b>Local</b><span>evaluator</span><i aria-hidden="true"></i></span>
+            <small>Run model and agent processes on this evaluator, with the selected GPU allocation.</small>
+          </span>
+        </label>
+        <label class="execution-choice">
+          <input type="radio" name="compute_placement" value="modal"
+            data-placement-label="Remote · Modal" checked required>
+          <span class="execution-choice-body">
+            <span class="execution-choice-heading"><b>Remote</b><span>Modal</span><i aria-hidden="true"></i></span>
+            <small>Provision model and agent compute through Modal.</small>
+          </span>
+        </label>
+      </fieldset>
+
+      <fieldset class="execution-choices">
+        <legend>Environment VMs</legend>
+        <label class="execution-choice">
+          <input type="radio" name="environment_placement" value="local"
+            data-placement-label="Local" required>
+          <span class="execution-choice-body">
+            <span class="execution-choice-heading"><b>Local</b><span>evaluator</span><i aria-hidden="true"></i></span>
+            <small>Spawn real KVM/QEMU environment VMs on this evaluator.</small>
+          </span>
+        </label>
+        <label class="execution-choice">
+          <input type="radio" name="environment_placement" value="modal"
+            data-placement-label="Remote · Modal" checked required>
+          <span class="execution-choice-body">
+            <span class="execution-choice-heading"><b>Remote</b><span>Modal</span><i aria-hidden="true"></i></span>
+            <small>Provision environment VMs through Modal.</small>
+          </span>
+        </label>
+      </fieldset>
+    </div>
+    <p class="placement-status" data-placement-status></p>
+
+    <div class="wizard-actions end"><button type="button" data-wizard-next>Continue to agent</button></div>
+  </section>
+
+  <section class="wizard-panel" data-wizard-panel="agent" aria-labelledby="agent-step-title" hidden>
+    <div class="selected-contract" aria-label="Selected evaluation contract">
+      <div><span>Selected track</span><strong data-summary-track>—</strong></div>
+      <div><span>Benchmark</span><strong data-summary-benchmark>—</strong></div>
+      <div><span>GPU allocation</span><strong data-summary-hardware>—</strong></div>
+      <div><span>Execution mode</span><strong data-summary-algorithm>—</strong></div>
+      <div><span>Parallel evaluations</span><strong data-summary-parallel>—</strong></div>
+      <div><span>Active agents</span><strong data-summary-agents>—</strong></div>
+      <div><span>Model / agent</span><strong data-summary-compute>—</strong></div>
+      <div><span>Environment VMs</span><strong data-summary-environment>—</strong></div>
+      <div><span>Success bar</span><strong data-summary-success>—</strong></div>
+      <button type="button" class="btn secondary small" data-wizard-back>Change</button>
+    </div>
+
+    <header class="wizard-heading">
+      <span>Step 2 of 2</span>
+      <h2 id="agent-step-title">Choose an agent</h2>
+      <p>The agent is user code. It can be a starter below or your own ZIP containing exactly <code>init.py</code> and <code>agent.py</code>.</p>
+    </header>
+
+    <div class="agent-source-tabs" role="tablist" aria-label="Agent source">
+      <button type="button" role="tab" aria-selected="true" data-agent-source="starter">Starter agent</button>
+      <button type="button" role="tab" aria-selected="false" data-agent-source="upload">Upload ZIP</button>
+    </div>
+
+    <section data-agent-panel="starter" aria-label="Starter agents">
+      <div class="template-grid">
+        {% for t in templates %}
+        <article class="template-card" data-template-card data-compatible-benchmarks="{{ t.compatible_benchmarks | join(',') }}" data-required-environment="{{ t.required_environment_variables | join(',') }}">
+          <div class="tname"><span>{{ t.name }}</span><span class="chip muted">Starter</span></div>
+          <div class="tdesc">{{ t.description }}</div>
+          <div class="tsub">Known compatible: {{ t.compatible_benchmarks | join(', ') }}</div>
+          {% if t.required_environment_variables %}<div class="tsub">Requires: {{ t.required_environment_variables | join(', ') }}</div>{% endif %}
+          <div class="tactions">
+            <label class="template-select"><input type="radio" name="template_choice" value="{{ t.name }}">Select agent</label>
+            <a class="btn secondary small" href="/templates/{{ t.name }}.zip">Download</a>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      <div class="inline-empty" data-no-compatible-template hidden>No starter is registered for this benchmark. Upload your own agent instead.</div>
+    </section>
+
+    <section data-agent-panel="upload" aria-label="Upload agent" hidden>
+      <div class="upload-agent-panel">
+        <div><h3>Submission ZIP</h3><p>The archive must contain only <code>init.py</code> and <code>agent.py</code> at its root.</p></div>
+        <input type="file" id="file" accept=".zip" aria-label="Submission ZIP">
+      </div>
+    </section>
+
+    <div class="agent-name-field">
+      <label for="name">Evaluation name</label>
+      <input type="text" name="name" id="name" required maxlength="120" placeholder="my-agent-v1">
+    </div>
+    <section class="environment-variables-panel" aria-labelledby="environment-variables-title">
+      <header class="environment-panel-heading">
+        <div><h3 id="environment-variables-title">Environment variables</h3><p>Select reusable account variables or add values only for this evaluation.</p></div>
+        <a class="btn secondary small" href="/me#environment-variables">Manage saved</a>
+      </header>
+
+      <div class="environment-scope">
+        <div class="environment-scope-heading"><span>Saved variables</span><small>Account level</small></div>
+        {% if saved_environment_variable_names %}
+        <div class="saved-environment-list">
+          {% for variable_name in saved_environment_variable_names %}
+          <label><input type="checkbox" name="saved_environment_choice" value="{{ variable_name }}"><code>{{ variable_name }}</code></label>
+          {% endfor %}
+        </div>
+        {% else %}
+        <p class="environment-empty">No saved variables. Add a one-off value below or save one for future evaluations.</p>
+        {% endif %}
+      </div>
+
+      <div class="environment-scope evaluation-environment-scope">
+        <div class="environment-scope-heading"><span>This evaluation</span><button type="button" class="secondary small" data-add-environment-variable>Add variable</button></div>
+        <div class="evaluation-environment-list" data-evaluation-environment-list></div>
+        <p class="environment-empty" data-evaluation-environment-empty>No one-off variables.</p>
+      </div>
+      <p class="environment-precedence">A value added for this evaluation overrides a selected saved variable with the same name. All values are encrypted and hidden after submission.</p>
+    </section>
+    <template id="evaluation-environment-row">
+      <div class="evaluation-environment-row">
+        <label><span>Name</span><input type="text" data-environment-name placeholder="OPENAI_API_KEY" pattern="[A-Z][A-Z0-9_]*" maxlength="128" autocomplete="off" spellcheck="false"></label>
+        <label><span>Value</span><input type="password" data-environment-value maxlength="16384" autocomplete="new-password"></label>
+        <button type="button" class="secondary small" data-remove-environment-variable aria-label="Remove environment variable">Remove</button>
+      </div>
+    </template>
+    <div class="error-box" id="submit-error"></div>
+    <div class="wizard-actions"><button type="button" class="secondary" data-wizard-back>Back</button><button type="submit" data-start-evaluation>Start evaluation</button></div>
+  </section>
+</form>
+{% endif %}
+{% endblock %}

@@ -1,0 +1,12 @@
+{
+  "description": "Yutori Navigator n2 through the official SDK.",
+  "gpu": null,
+  "required_environment_variables": [
+    "YUTORI_API_KEY"
+  ],
+  "optional_environment_variables": [
+    "YUTORI_REASONING_EFFORT",
+    "YUTORI_MAX_STEPS",
+    "YUTORI_ENV_TIMEOUT_SEC"
+  ]
+}

@@ -1,0 +1,8 @@
+{
+  "description": "Claude Code driving the desktop through an authenticated local action gateway and the standard Computer API.",
+  "optional_environment_variables": [
+    "ANTHROPIC_API_KEY",
+    "CLAUDE_CODE_OAUTH_TOKEN"
+  ],
+  "gpu": null
+}

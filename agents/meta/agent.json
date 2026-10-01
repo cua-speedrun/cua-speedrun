@@ -1,0 +1,7 @@
+{
+  "description": "Meta super_nova_ext via its OpenAI-compatible relay, using the stateless Responses API by default (with chat-completions and pyautogui modes available). Drives the desktop with a single `computer` function tool using 0-1000 normalized coordinates and a screenshot after every action.",
+  "required_environment_variables": [
+    "META_API_KEY"
+  ],
+  "gpu": null
+}

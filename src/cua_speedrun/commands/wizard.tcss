@@ -1,0 +1,33 @@
+Screen { background: #10191e; color: #dce8ec; }
+.masthead { height: 3; padding: 1 3 0 3; color: #6ed6df; text-style: bold; }
+.step { height: 2; padding: 0 3; color: #95aab3; }
+.body { margin: 0 2; padding: 1 2; border: round #314750; height: 1fr; }
+.title { height: auto; margin-bottom: 1; text-style: bold; }
+.hint { height: auto; color: #95aab3; margin-bottom: 1; }
+.error { height: auto; color: #ff9285; }
+.banner { margin: 0 3; }
+.nav { height: 3; margin: 1 2; align-horizontal: right; }
+Button { margin-left: 1; min-width: 14; }
+Button.-primary { background: #6ed6df; color: #10191e; text-style: bold; }
+Button:focus { text-style: bold; }
+Input, Select { margin-bottom: 1; }
+Input:focus { border: tall #6ed6df; }
+OptionList { height: 1fr; min-height: 5; background: #10191e; border: none; }
+OptionList > .option-list--option { padding: 0 1 1 1; }
+OptionList > .option-list--option-highlighted { background: #24424c; color: #ffffff; }
+.custom-label { margin-top: 1; height: 1; color: #95aab3; }
+.field { width: 1fr; height: auto; padding-right: 1; }
+.field Label { height: 1; color: #95aab3; }
+.row { height: auto; }
+Checkbox { height: 3; background: transparent; border: none; }
+Collapsible { background: transparent; border: none; padding: 0; }
+Footer { background: #19282f; color: #95aab3; }
+#phase { height: 2; color: #6ed6df; text-style: bold; }
+#elapsed { height: 1; color: #95aab3; }
+#preparation-steps { height: auto; margin: 1 0; }
+ProgressBar { height: 2; margin-bottom: 1; }
+RichLog { height: 1fr; min-height: 3; background: #10191e; border-top: solid #314750; padding-top: 1; }
+#credential-list { height: auto; margin: 1 0; color: #95aab3; }
+Screen.narrow .row { layout: vertical; }
+Screen.narrow .field { width: 100%; }
+Screen.narrow .masthead { padding-left: 2; }

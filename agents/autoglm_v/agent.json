@@ -1,0 +1,7 @@
+{
+  "description": "GLM AutoGLM-V computer-use agent ported from OSWorld mm_agents/autoglm_v: think/answer python pseudo-code actions with 0-1000 normalized coordinates via the Zhipu open platform.",
+  "required_environment_variables": [
+    "GLM_API_KEY"
+  ],
+  "gpu": null
+}

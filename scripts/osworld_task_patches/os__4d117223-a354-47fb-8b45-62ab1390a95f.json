@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_name": "os__4d117223-a354-47fb-8b45-62ab1390a95f",
+  "operations": [
+    {
+      "op": "remove",
+      "index": 5
+    },
+    {
+      "op": "replace",
+      "index": 3,
+      "value": {
+        "type": "launch",
+        "parameters": {
+          "command": "gnome-terminal --title=Terminal --working-directory=/home/user/testDir"
+        }
+      }
+    }
+  ]
+}

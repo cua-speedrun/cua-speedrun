@@ -1,0 +1,43 @@
+{
+  "schema_version": 1,
+  "images": {
+    "osworld": {
+      "reference": "docker.io/cuaspeedrun/osworld@sha256:53e3abe0bd01bd0d781567a4c0168bf1a0a9637733f74260b77bd400b7bcab4e",
+      "provenance": {
+        "schema_version": 2,
+        "recipe": "cua-speedrun-osworld-modal-snapshot@1",
+        "delta_fingerprint": "fef4e9162261e62854b5b49222bc84cc10601034ef8d575b4ee30331835fad64",
+        "source_revision": "a5d9c3eaae98eebf6e3a0beb84e7e47cf72ae133",
+        "archive_sha256": "b795b6cd4c69b252c1b4f10150a347795555032501b60fd031751ed09b896712",
+        "source_image_sha256": "6bf667a852b3c307f61d9f09c42559351f45e0607e428b4997becf534cf4d313",
+        "ssh_prepared": true,
+        "tools_prepared": true,
+        "nopasswd_sudo": true,
+        "ssh_user": "user",
+        "guest_auth_prepared": true
+      }
+    },
+    "mypcbench": {
+      "reference": "docker.io/cuaspeedrun/mypcbench@sha256:2e3bdefc12a95685a9046c8ec18eaaeadcf8cd0f49c73652d6026d1a939f5adf",
+      "provenance": {
+        "source_image_sha256": "340873b9092766e2694aa2940dadcd93de30664151295570bf818496ca3d20e2",
+        "source_revision": "eeefdb7ca4686b8175ced740b0d1abb986021ec0",
+        "recipe_sha256": "37c74362a8457d2c6df2b77cc3638a66bbb4314b1a4bb7032de7b156ad866809",
+        "validated": true
+      }
+    },
+    "osworld2": {
+      "reference": "docker.io/cuaspeedrun/osworld2@sha256:e79e076f1b91fda63624a9324bb8163c6dce46ab96003adb8725b40aa5c2b871",
+      "provenance": {
+        "source_archive_sha256": "eb737ae70b49849e24af407de6a518439a23de05a8497096a948334ce0a909aa",
+        "source_revision": "8213366932c553e5fe758d0f2c8c8b81ffc3be8c",
+        "recipe_sha256": "6043ff9f7c7c27d7d338dd0e60adbd16542628e595d4068a673450d7cebcef68",
+        "validated": true
+      }
+    },
+    "cua-world-base": {
+      "reference": "docker.io/cuaspeedrun/cua-world-base@sha256:fcf7bcb7b577067e072d09584b037ee6068baab46e84facefbe42d34373a7077",
+      "provenance": {"image_schema": "ubuntu-22.04-v4-3a0091608b165788"}
+    }
+  }
+}

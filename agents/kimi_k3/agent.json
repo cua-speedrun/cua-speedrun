@@ -1,0 +1,7 @@
+{
+  "description": "Kimi K3 (moonshotai/kimi-k3 via OpenRouter), ported from OSWorld's Kimi screenshot/pyautogui agent with preserved thinking history, maximum reasoning effort, and literal-only structured GUI action translation.",
+  "required_environment_variables": [
+    "OPENROUTER_API_KEY"
+  ],
+  "gpu": null
+}

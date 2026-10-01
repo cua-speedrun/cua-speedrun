@@ -1,0 +1,7 @@
+{
+  "description": "Claude via Anthropic's native computer-use tool, with per-action screenshots, coordinate rescaling, bounded image history, and prompt caching.",
+  "required_environment_variables": [
+    "ANTHROPIC_API_KEY"
+  ],
+  "gpu": null
+}

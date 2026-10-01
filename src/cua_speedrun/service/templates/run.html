@@ -1,0 +1,128 @@
+{% extends "layout.html" %}
+{% block title %}Evaluation {{ run.run_id }} · cua-speedrun{% endblock %}
+{% block content %}
+<div data-run-id="{{ run.run_id }}" data-stage="{{ run.stage }}" data-last-event-id="{{ events[-1].id if events else 0 }}"></div>
+<header class="page-header">
+  <div><h1>{% if run.stage not in ("card_ready", "failed", "rejected", "held", "cancelled") %}<span class="live-dot"></span>{% endif %}{{ run.submission.name }}</h1><p>Evaluation {{ run.run_id }} · {{ run.submission.track }} · created {{ run.created_at.strftime("%Y-%m-%d %H:%M") }} UTC</p></div>
+  <div class="page-actions">
+    {% if run.card_token %}<a class="btn" href="/cards/{{ run.card_token }}">View result</a>{% endif %}
+    {% if run.stage in ("failed", "cancelled") %}<button type="button" data-resume-run>Resume unfinished tasks</button>{% endif %}
+    {% if run.stage not in ("card_ready", "failed", "rejected", "held", "cancelled") %}<button type="button" class="secondary destructive" data-stop-run{% if run.stop_requested %} disabled{% endif %}>{{ "Stopping…" if run.stop_requested else "Stop evaluation" }}</button>{% endif %}
+    <a class="btn secondary" href="/me">Evaluations</a>
+  </div>
+</header>
+
+<section class="run-console" aria-label="Evaluation progress">
+  <div class="run-console-top"><span>Status: {{ run.stage | replace("_", " ") }}</span><span>{{ execution_topology.label }}</span></div>
+  <div class="stages">
+    {% for stage in stage_order %}
+    <div class="stage {% if stage == run.stage %}now {% if stage == 'card_ready' %}terminal-ok{% elif stage in ('failed', 'rejected', 'held', 'cancelled') %}terminal-bad{% endif %}{% elif loop.index0 < now_index %}done{% endif %}" data-stage="{{ stage }}">{{ stage | replace("_", " ") }}</div>
+    {% endfor %}
+  </div>
+  {% if run.error %}<div class="run-failure"><strong>Execution error</strong><div>{{ run.error }}</div>{% if artifacts.execution_logs %}<div class="run-failure-logs"><span>Inspect logs</span>{% for log in artifacts.execution_logs %}<a href="{{ log.url }}" target="_blank">{{ log.context }} · {{ log.name }}</a>{% endfor %}</div>{% endif %}</div>{% endif %}
+</section>
+
+<nav class="inspector-nav" aria-label="Evaluation sections">
+  <a href="#overview">Overview</a><a href="#tasks">Tasks <span>{{ summary.task_count }}</span></a><a href="#artifacts">Artifacts <span>{{ (artifacts.execution_logs | length) + (artifacts.logs | length) }}</span></a><a href="#contract">Contract</a><a href="#events">Events <span>{{ events | length }}</span></a>
+</nav>
+
+<section class="run-overview" id="overview">
+  <article class="run-readout accent">
+    <span class="instrument-label">Status</span>
+    <strong>{{ run.stage | replace("_", " ") }}</strong>
+    <p>{{ summary.finished_count }}/{{ summary.task_count }} tasks complete</p>
+  </article>
+  <article class="run-readout">
+    <span class="instrument-label">Tasks</span>
+    <strong>{{ summary.passed_count }}<i> pass</i> / {{ summary.failed_count }}<i> fail</i></strong>
+    <p>Passed and failed tasks</p>
+  </article>
+  <article class="run-readout">
+    <span class="instrument-label">Elapsed</span>
+    {% if summary.duration_sec is not none %}<strong>{{ "%.1f" | format(summary.duration_sec) }}<i>s</i></strong><p>Executor start to terminal report.</p>
+    {% elif run.started_at %}<strong>running</strong><p>Final elapsed time appears at completion.</p>
+    {% elif run.stage == "cancelled" %}<strong>not started</strong><p>Stopped before an executor claimed it.</p>
+    {% else %}<strong>queued</strong><p>Waiting for an executor start timestamp.</p>{% endif %}
+  </article>
+  <article class="run-readout">
+    <span class="instrument-label">Measured time</span>
+    {% if run.result %}<strong>{{ "%.2f" | format(run.result.total_time_sec) }}<i>s</i></strong><p>{{ "%.1f" | format((run.result.get('mean_score') if run.result.get('mean_score') is not none else run.result.success_rate) * 100) }}% score · {{ "%.1f" | format(run.result.success_rate * 100) }}% exact success · <a href="/cards/{{ run.card_token }}">open diagnosis</a></p>
+    {% else %}<strong>pending</strong><p>Scoring starts only after task evidence is complete.</p>{% endif %}
+  </article>
+  <article class="run-readout">
+    <span class="instrument-label">Model cost</span>
+    {% if summary.cost_usd is not none %}<strong>${{ "%.4f" | format(summary.cost_usd) }}</strong><p>{% for key, value in summary.usage | dictsort %}{{ key }} {{ value }}{% if not loop.last %} · {% endif %}{% endfor %}</p>
+    {% else %}<strong>—</strong><p>No template cost snapshot received yet.</p>{% endif %}
+  </article>
+</section>
+
+<section class="inspector-section" id="tasks">
+  <div class="section-heading">
+    <div><h2>Tasks</h2></div><p>Open a task to inspect timing, actions, screenshots, and logs.</p>
+  </div>
+  <div class="task-grid run-task-grid">
+    {% for task in run.tasks %}
+    <article class="task-cell" data-key="{{ task.task_key }}" data-stage="{{ task.stage }}" {% if task.passed is not none %}data-passed="{{ task.passed | lower }}"{% endif %}>
+      <div class="task-cell-head"><span>#{{ loop.index }}</span><a href="/runs/{{ run.run_id }}/tasks/{{ task.task_id }}/{{ task.seed }}">View</a></div>
+      <div class="tk">{{ task.task_id }}<small>seed {{ task.seed }}</small></div>
+      <div class="st">
+        <span class="chip stage-chip {% if task.stage == 'done' and task.passed %}pass{% elif task.stage in ('done', 'failed') %}fail{% elif task.stage == 'running' %}live{% else %}muted{% endif %}">{% if task.stage == 'done' %}{{ 'pass' if task.passed else 'fail' }}{% else %}{{ task.stage | replace("_", " ") }}{% endif %}</span>
+        <span><span class="t">{% if task.task_time_sec is not none %}{{ "%.2f" | format(task.task_time_sec) }}s{% endif %}</span>{% if task.cost_usd is not none %} · <span class="cost">${{ "%.4f" | format(task.cost_usd) }}</span>{% endif %}</span>
+      </div>
+      {% if task.task_time_sec is not none %}<div class="task-mini-split"><span style="width:{{ (task.agent_time_sec / task.task_time_sec * 100) if task.agent_time_sec is not none and task.task_time_sec else 0 }}%"></span></div><div class="task-mini-caption"><span>agent</span><span>environment</span></div>{% endif %}
+    </article>
+    {% endfor %}
+    {% if not run.tasks %}<p class="empty" id="tasks-empty">Task instances appear here as the run fans out.</p>{% endif %}
+  </div>
+</section>
+
+<section class="inspector-section" id="artifacts">
+  <div class="section-heading">
+    <div><h2>Artifacts</h2></div><p>Trajectories, sandbox identifiers, and task logs.</p>
+  </div>
+  <div class="artifact-toolbar">
+    {% if artifacts.has_trajectory %}<a class="btn secondary" href="/runs/{{ run.run_id }}/trajectory">View trajectory</a>{% endif %}
+    {% if execution_topology.compute.provider == "modal" or execution_topology.environment.provider == "modal" %}<a class="btn secondary" href="https://modal.com/apps" target="_blank" rel="noreferrer">Open Modal</a>{% endif %}
+  </div>
+  {% if artifacts.execution_logs %}
+  <div class="execution-log-list">
+    {% for log in artifacts.execution_logs %}<a href="{{ log.url }}" target="_blank"><span>{{ log.context }}</span><strong>{{ log.name }}</strong><small>{{ log.size_kb }} KB · open raw log</small></a>{% endfor %}
+  </div>
+  {% endif %}
+  {% if not artifacts.execution_logs and not artifacts.logs %}<p class="comparison-note">Logs and screenshots appear as the executor reports task evidence. Use the event stream below while the evaluation is running.</p>{% endif %}
+
+  {% if artifacts.sandboxes %}
+  <table class="instrument sandbox-table">
+    <thead><tr><th>Task instance</th><th>Environment sandbox</th><th>Agent sandbox</th></tr></thead>
+    <tbody>{% for sandbox in artifacts.sandboxes %}<tr><td class="fingerprint">{{ sandbox.task }}</td><td class="fingerprint">{{ sandbox.env or "—" }}</td><td class="fingerprint">{{ sandbox.agent or "—" }}</td></tr>{% endfor %}</tbody>
+  </table>
+  {% endif %}
+  {% if artifacts.logs %}<div class="log-links">{% for log in artifacts.logs %}<a class="log-link" href="{{ log.url }}" target="_blank">{{ log.task_id }}/seed_{{ log.seed }} <b>{{ log.name }}</b></a>{% endfor %}</div>{% endif %}
+</section>
+
+<section class="inspector-section" id="contract">
+  <div class="section-heading">
+    <div><h2>Execution contract</h2></div><p>{{ "Partial metadata for this legacy run." if contract.legacy else "Settings fixed before execution." }}</p>
+  </div>
+  <div class="run-contract-panel">
+    <dl class="contract-grid">{% for field in contract.fields %}<div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>{% endfor %}</dl>
+    {% if runtime_environment %}
+    <div class="runtime-environment-summary">
+      <div><span>Runtime variables</span><small>Values hidden</small></div>
+      <ul>{% for variable in runtime_environment %}<li><code>{{ variable.name }}</code><span>{{ "This evaluation" if variable.source == "evaluation" else "Saved" }}</span></li>{% endfor %}</ul>
+    </div>
+    {% endif %}
+    <div class="contract-season"><span>Season key</span><code>{{ contract.season_key or "assigned after execution" }}</code></div>
+  </div>
+</section>
+
+<section class="inspector-section" id="events">
+  <div class="section-heading">
+    <div><h2>Events</h2></div><p>Raw execution status events.</p>
+  </div>
+  <details class="event-inspector" {% if run.stage not in ("card_ready", "failed", "rejected", "held", "cancelled") %}open{% endif %}>
+    <summary><span>{{ events | length }} recorded events</span><small>{{ "live stream open" if run.stage not in ("card_ready", "failed", "rejected", "held", "cancelled") else "expand raw stream" }}</small></summary>
+    <div class="log" id="log">{% for event in events %}{% if event.kind == "init_line" %}{{ event.payload.line }}{% else %}<div><span class="k">{{ event.kind }}</span>  {{ event.payload | tojson }}{% if event.task_key %}  [{{ event.task_key }}]{% endif %}</div>{% endif %}{% endfor %}</div>
+  </details>
+</section>
+{% endblock %}

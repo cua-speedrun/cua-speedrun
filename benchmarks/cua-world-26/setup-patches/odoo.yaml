@@ -1,0 +1,56 @@
+schema_version: 1
+replacements:
+- path: scripts/setup_odoo.sh
+  old: |2
+            # Base is installed, check for stock module
+            STOCK_INSTALLED=$(docker exec odoo-postgres psql -U odoo -d $DB_NAME -tAc "SELECT 1 FROM ir_module_module WHERE name='stock' AND state='installed'" 2>/dev/null)
+
+            if [ "$STOCK_INSTALLED" != "1" ]; then
+                echo "Installing Inventory module..."
+                docker exec odoo-web odoo -c /etc/odoo/odoo.conf -d $DB_NAME -i stock --stop-after-init 2>&1 | tail -10 || true
+                echo "Restarting Odoo..."
+                docker-compose restart web
+                sleep 15
+                wait_for_odoo 120
+            else
+                echo "All required modules already installed."
+            fi
+  new: |2
+            echo "Base module is installed; checking all required modules below."
+- path: scripts/setup_odoo.sh
+  old: |
+    # If database exists and has required modules, we can skip installation
+    # Module installation is handled in the database existence check above
+  new: |
+    # Every database path must satisfy the same application dependencies.
+    REQUIRED_MODULES="base,stock,sale_management,purchase"
+    required_module_count() {
+        docker exec odoo-postgres psql -U odoo -d "$DB_NAME" -tAc \
+            "SELECT COUNT(*) FROM ir_module_module WHERE name IN ('base','stock','sale_management','purchase') AND state='installed'"
+    }
+    # Never pass installed modules to --init: reinitializing their metadata
+    # can remove demo records that other installed applications reference.
+    MISSING_MODULES=$(docker exec odoo-postgres psql -U odoo -d "$DB_NAME" -tAc \
+        "SELECT COALESCE(string_agg(required.name, ',' ORDER BY required.name), '') FROM (VALUES ('base'),('stock'),('sale_management'),('purchase')) AS required(name) LEFT JOIN ir_module_module AS installed ON installed.name=required.name AND installed.state='installed' WHERE installed.id IS NULL") || exit 1
+    if [ -n "$MISSING_MODULES" ]; then
+        echo "Installing missing Odoo modules: $MISSING_MODULES"
+        # Do not migrate the schema while another Odoo server is using it.
+        docker-compose stop web || exit 1
+        if ! (set -o pipefail; docker-compose run --rm --no-deps web odoo \
+            -c /etc/odoo/odoo.conf -d "$DB_NAME" -i "$MISSING_MODULES" \
+            --load-language=en_US --stop-after-init \
+            2>&1 | tee /tmp/odoo_required_modules.log | tail -30); then
+            echo "ERROR: Required Odoo module installation failed"
+            exit 1
+        fi
+        docker-compose up -d web || exit 1
+        wait_for_odoo 180 || exit 1
+    fi
+    MODULE_COUNT=$(required_module_count) || exit 1
+    if [ "$MODULE_COUNT" != "4" ]; then
+        echo "ERROR: Expected four required Odoo modules, found $MODULE_COUNT"
+        exit 1
+    fi
+    wait_for_odoo 180 || exit 1
+    wait_for_database 180 || exit 1
+    echo "All required modules installed: $REQUIRED_MODULES"

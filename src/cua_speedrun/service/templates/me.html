@@ -1,0 +1,88 @@
+{% extends "layout.html" %}
+{% block title %}Evaluations · cua-speedrun{% endblock %}
+{% block content %}
+<header class="page-header">
+  <div><h1>Evaluations</h1><p>Run status, results, and execution history.</p></div>
+  <div class="page-actions"><a class="btn" href="/submit">+ New evaluation</a></div>
+</header>
+
+{% if user %}
+{% set active_count = runs | rejectattr("stage", "in", ["card_ready", "failed", "rejected", "held", "cancelled"]) | list | length %}
+{% set successful_count = runs | selectattr("stage", "equalto", "card_ready") | list | length %}
+<section class="stats-grid" aria-label="Evaluation summary">
+  <article class="stat-card"><span>Active evaluations</span><strong>{{ active_count }}</strong><p>Queued or running</p></article>
+  <article class="stat-card"><span>Completed evaluations</span><strong>{{ successful_count }}</strong><p>Results available</p></article>
+  <article class="stat-card"><span>Total evaluations</span><strong>{{ runs | length }}</strong><p>All runs in this account</p></article>
+</section>
+
+{% if not modal_token_id %}
+<div class="setup-alert">
+  <div><strong>Modal remote is not configured</strong><p>Add a token pair for remote Modal runs. Fully local evaluations do not require one.</p></div>
+  <a class="btn secondary small" href="#modal-credentials" onclick="document.getElementById('modal-credentials').open=true">Configure</a>
+</div>
+{% endif %}
+
+<details class="credential-card" id="modal-credentials">
+  <summary><span>Modal credentials</span><span class="chip {% if modal_token_id %}pass{% else %}muted{% endif %}">{{ "Configured" if modal_token_id else "Not configured" }}</span></summary>
+  <div class="credential-body">
+    <p>Remote placements run in your Modal workspace. Local placements use the evaluator host. Token secrets are encrypted at rest and are not displayed after saving.</p>
+    {% if modal_token_id %}
+    <p>Token ID: <code>{{ modal_token_id[:6] }}…{{ modal_token_id[-4:] }}</code></p>
+    <form method="post" action="/me/modal-credentials/delete"><button class="secondary" type="submit">Remove credentials</button></form>
+    {% else %}
+    <form method="post" action="/me/modal-credentials">
+      <label for="token-id">Token ID</label><input id="token-id" type="text" name="token_id" placeholder="ak-..." required pattern="ak-.*" autocomplete="off">
+      <label for="token-secret">Token secret</label><input id="token-secret" type="password" name="token_secret" placeholder="as-..." required pattern="as-.*" autocomplete="off">
+      <button type="submit">Save credentials</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+
+<details class="credential-card" id="environment-variables">
+  <summary><span>Saved environment variables</span><span class="chip {% if saved_environment_variable_names %}pass{% else %}muted{% endif %}">{{ saved_environment_variable_names | length }} saved</span></summary>
+  <div class="credential-body">
+    <p>Save a variable once, then select it when starting an evaluation. Values are encrypted, hidden after saving, and available only to that evaluation's <code>init.py</code> and <code>agent.py</code>. Saving an existing name replaces its value.</p>
+    {% if saved_environment_variable_names %}
+    <div class="environment-variable-list" aria-label="Saved environment variables">
+      {% for name in saved_environment_variable_names %}
+      <div><code>{{ name }}</code><form method="post" action="/me/environment-variables/delete"><input type="hidden" name="name" value="{{ name }}"><button class="secondary small" type="submit">Remove</button></form></div>
+      {% endfor %}
+    </div>
+    {% endif %}
+    <form method="post" action="/me/environment-variables">
+      <label for="environment-variable-name">Name</label><input id="environment-variable-name" type="text" name="name" placeholder="OPENAI_API_KEY" required pattern="[A-Z][A-Z0-9_]*" maxlength="128" autocomplete="off" spellcheck="false">
+      <label for="environment-variable-value">Value</label><input id="environment-variable-value" type="password" name="value" required maxlength="16384" autocomplete="new-password">
+      <button type="submit">Save variable</button>
+    </form>
+  </div>
+</details>
+
+<div class="section-bar"><div><h2>All evaluations</h2></div></div>
+<div class="evaluation-toolbar"><input type="text" id="evaluation-search" placeholder="Search by name or track…" aria-label="Search evaluations"></div>
+{% if runs %}
+<div class="evaluation-list" id="evaluation-list">
+  <div class="evaluation-row evaluation-header" aria-hidden="true"><span>Run</span><span>Name</span><span>Track</span><span>Status</span><span>Created</span></div>
+  {% for r in runs %}
+  <article class="evaluation-row" data-search="{{ r.name | lower }} {{ r.track | lower }} {{ r.stage | lower }}">
+    <div class="evaluation-id"><a href="/runs/{{ r.run_id }}">{{ r.run_id }}</a></div>
+    <div class="evaluation-name"><a href="/runs/{{ r.run_id }}">{{ r.name }}</a><small>{{ r.track }}</small></div>
+    <div class="evaluation-track">{{ r.track }}</div>
+    <div class="evaluation-stage">
+      {% if r.stage == "card_ready" %}<span class="chip pass">Completed</span>
+      {% elif r.stage in ("failed", "rejected") %}<span class="chip fail">{{ r.stage | replace("_", " ") }}</span>
+      {% elif r.stage == "held" %}<span class="chip warn">Held</span>
+      {% elif r.stage in ("queued", "cancelled") %}<span class="chip muted">{{ r.stage }}</span>
+      {% else %}<span class="chip live">{{ r.stage | replace("_", " ") }}</span>{% endif %}
+    </div>
+    <time class="evaluation-started">{{ r.created_at[:19] }}</time>
+  </article>
+  {% endfor %}
+</div>
+{% else %}
+<section class="empty-state"><h2>No evaluations</h2><p>Start with a template or upload a submission.</p><a class="btn" href="/submit">New evaluation</a></section>
+{% endif %}
+{% else %}
+<section class="empty-state"><h2>Sign in required</h2><p>Sign in to run and view evaluations.</p><a class="btn" href="{{ login_url }}">Sign in</a></section>
+{% endif %}
+{% endblock %}

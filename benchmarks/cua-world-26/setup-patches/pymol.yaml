@@ -1,0 +1,14 @@
+schema_version: 1
+replacements:
+- path: scripts/setup_pymol.sh
+  old: 'pkill -f "pymol"'
+  new: 'pkill -u ga -f "pymol"'
+- path: scripts/task_utils.sh
+  old: 'pkill -f "pymol"'
+  new: 'pkill -u ga -f "pymol"'
+- path: scripts/task_utils.sh
+  old: 'pkill -9 -f "pymol"'
+  new: 'pkill -9 -u ga -f "pymol"'
+- path: scripts/task_utils.sh
+  old: 'pgrep -f "/usr/bin/pymol" > /dev/null 2>&1 || pgrep -f "pymol"'
+  new: 'pgrep -u ga -f "/usr/bin/pymol" > /dev/null 2>&1 || pgrep -u ga -f "pymol"'

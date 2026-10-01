@@ -1,0 +1,20 @@
+{
+  "schema_version": 1,
+  "task_name": "vs_code__982d12a5-beab-424f-8d38-d2a48429e511",
+  "operations": [
+    {
+      "op": "replace",
+      "index": 0,
+      "value": {
+        "type": "command",
+        "parameters": {
+          "command": [
+            "python3",
+            "-c",
+            "import json; from pathlib import Path; p=Path.home()/'.config/Code/User/settings.json'; p.parent.mkdir(parents=True, exist_ok=True); data=json.loads(p.read_text()) if p.exists() else {}; data['workbench.colorTheme']='Red'; p.write_text(json.dumps(data))"
+          ]
+        }
+      }
+    }
+  ]
+}

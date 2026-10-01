@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/ljang0/MyPCBench",
+  "commit": "dd18d10842f12cabdcad020e51c87501e76ccad7",
+  "path": "agent-harness/utils/osworld_full_traj_judge.py",
+  "sha256": "f7e18beead2df5a4cfa6ba1751682ce05c0065f0f6beb0afc0b6ea00d98bead1",
+  "modifications": "none",
+  "upstream_attribution": "Judge adapted by MyPCBench from ljang0/Odysseys scripts/python/run_full_trajectory_per_rubric.py (CC-BY-4.0)."
+}

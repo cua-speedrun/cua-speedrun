@@ -1,0 +1,7 @@
+{
+  "description": "Gemini 3.5 Flash via the Gemini Interactions API computer_use desktop tool. Calls the hosted API from the Modal agent sandbox and tracks token cost.",
+  "required_environment_variables": [
+    "GEMINI_API_KEY"
+  ],
+  "gpu": null
+}

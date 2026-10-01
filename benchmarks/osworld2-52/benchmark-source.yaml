@@ -1,0 +1,87 @@
+schema_version: 1
+prepare:
+  default_environment: modal-native
+  forward_env: [HF_TOKEN]
+  parallel: [modal-native]
+  modal-native:
+  - script: scripts/prepare_osworld2_modal.py
+    args: [--assets-only]
+  - script: scripts/import_desktop_image.py
+    args: [--image, osworld2, --benchmark, '{benchmark}']
+  modal:
+  - script: scripts/prepare_osworld2_modal.py
+name: osworld2-52
+version: 2026.06.24
+description: Fixed 52-task OSWorld2 subset with ascending numeric task IDs.
+source_benchmark:
+  name: osworld2
+  version: 2026.06.24
+selection:
+  method: fixed task list
+  source_task_count: 108
+  selected_task_count: 52
+  ordering: ascending numeric task ID
+  task_ids_sha256: fa1121fecd0f3a49a9022025479c0fb3740c3af6513c9ebb489abcb5cc14878e
+materializer:
+  path: scripts/import_osworld2.py
+  function: materialize
+  inputs:
+  - benchmarks/osworld2-52/benchmark-source.yaml
+  - scripts/import_osworld2.py
+  - scripts/osworld2_adapter.py
+  - scripts/osworld2_native.py
+  - scripts/osworld2_native_delta.sh
+  - scripts/build_osworld2_modal_image.py
+tasks:
+- '001'
+- '002'
+- '010'
+- '012'
+- '013'
+- '015'
+- 018
+- '020'
+- '021'
+- '022'
+- 028
+- 029
+- '030'
+- '033'
+- 038
+- '040'
+- '042'
+- '043'
+- '044'
+- '046'
+- '047'
+- 049
+- '051'
+- '053'
+- '054'
+- '057'
+- 058
+- 059
+- '061'
+- '063'
+- '065'
+- '066'
+- 068
+- '070'
+- '071'
+- '072'
+- '076'
+- 080
+- 085
+- 086
+- 088
+- 091
+- 094
+- 096
+- '100'
+- '101'
+- '102'
+- '103'
+- '104'
+- '106'
+- '107'
+- '108'

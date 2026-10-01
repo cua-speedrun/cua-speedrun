@@ -1,0 +1,7 @@
+{
+  "description": "GLM-5V-Turbo GUI agent (z-ai/glm-5v-turbo via OpenRouter) using the OSWorld-V2 GLM eval-agent prompt: thousandths coordinates, text history, and model-managed memory.",
+  "required_environment_variables": [
+    "OPENROUTER_API_KEY"
+  ],
+  "gpu": null
+}

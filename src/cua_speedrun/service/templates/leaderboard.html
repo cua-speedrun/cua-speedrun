@@ -1,0 +1,245 @@
+{% extends "layout.html" %}
+{% macro cost_content(result) %}
+  {% if result.cost_usd is not none %}
+    ${{ "%.4f" | format(result.cost_usd) }}
+
+  {% else %}<span class="missing-value">—</span>{% endif %}
+{% endmacro %}
+{% block title %}Results · cua-speedrun{% endblock %}
+{% block content %}
+<header class="results-header">
+  <div>
+    <span class="results-kicker">Published evaluations</span>
+    <h1>Results explorer</h1>
+    <p>Compare model performance, time, and cost within one exact evaluation contract.</p>
+  </div>
+
+  <div class="page-actions">
+    <a class="btn secondary" href="/methodology">Methodology</a>
+    <a class="btn" href="/submit{% if track %}?track={{ track.name | urlencode }}{% if benchmark_name %}&amp;benchmark={{ benchmark_name | urlencode }}{% endif %}{% endif %}">New evaluation</a>
+  </div>
+
+</header>
+
+{% if tracks %}
+<nav class="track-switcher" aria-label="Evaluation tracks">
+  {% for option in tracks %}
+  <a class="track-tab" href="/?track={{ option.name | urlencode }}" {% if option.active %}aria-current="true"{% endif %}>
+    <span>{{ option.label }}</span><small>{{ option.entry_count }}</small>
+  </a>
+  {% endfor %}
+</nav>
+{% endif %}
+
+{% if track %}
+<section class="scope-bar" aria-label="Result scope">
+  <div class="scope-primary">
+    <span class="scope-label">Track</span>
+    <strong>{{ track.label }}</strong>
+    <small>{{ track.name }}{% if track.gpu %} · {{ track.gpu }}{% endif %}</small>
+  </div>
+  <div class="scope-season">
+    <label for="season-select">Evaluation contract</label>
+    {% if seasons %}
+    <form method="get" action="/">
+      <input type="hidden" name="track" value="{{ track.name }}">
+      <select id="season-select" name="season" onchange="this.form.submit()">
+        {% for option in seasons %}
+        <option value="{{ option.key }}" {% if option.active %}selected{% endif %}>{{ option.label }} · {{ option.entry_count }} {{ "result" if option.entry_count == 1 else "results" }}</option>
+        {% endfor %}
+      </select>
+    </form>
+    {% else %}<span>No published contract</span>{% endif %}
+  </div>
+  {% if season %}
+  <div class="scope-facts">
+    {% if season.benchmark %}<span><b>Benchmark</b>{{ season.benchmark }}</span>{% endif %}
+    {% if season.hardware %}<span><b>Hardware</b>{{ season.hardware }}</span>{% endif %}
+    {% if season.algorithm %}<span><b>Algorithm</b>{{ season.algorithm }}</span>{% endif %}
+    <span><b>Status</b>{{ season.status }}</span>
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
+{% if current %}
+<section class="results-dashboard" data-results-dashboard data-static="false">
+  <script type="application/json" data-results-data>{{ dashboard_entries | tojson }}</script>
+  <script type="application/json" data-results-baseline>{{ dashboard_baseline | default(none) | tojson }}</script>
+
+  <div class="dashboard-topbar">
+    <div class="view-tabs" role="tablist" aria-label="Results view">
+      <button class="view-tab active" type="button" role="tab" aria-selected="true" data-view-button="leaderboard">
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3 4h12M3 9h12M3 14h12"/><circle cx="5" cy="4" r="1"/><circle cx="9" cy="9" r="1"/><circle cx="13" cy="14" r="1"/></svg>
+        Leaderboard
+      </button>
+      <button class="view-tab" type="button" role="tab" aria-selected="false" data-view-button="curves">
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M2.5 14.5h13M3.5 13l3-4 3 2 4.5-7"/><circle cx="6.5" cy="9" r="1"/><circle cx="9.5" cy="11" r="1"/><circle cx="14" cy="4" r="1"/></svg>
+        Curves
+      </button>
+      <button class="view-tab" type="button" role="tab" aria-selected="false" data-view-button="frontier3d">
+        <svg viewBox="0 0 18 18" aria-hidden="true"><path d="M3 5.5 9 2l6 3.5v7L9 16l-6-3.5zM3 5.5 9 9m6-3.5L9 9m0 7V9"/><circle cx="9" cy="9" r="1"/></svg>
+        3D frontier
+      </button>
+    </div>
+    <div class="result-count"><strong data-visible-count>{{ entry_count }}</strong><span>of {{ entry_count }} results</span></div>
+  </div>
+
+  <div class="dashboard-layout">
+    <aside class="filter-rail" aria-label="Result filters">
+      <div class="filter-rail-head">
+        <div><span>Refine</span><strong>Models</strong></div>
+        <button class="text-button" type="button" data-reset-filters>Reset</button>
+      </div>
+
+      <fieldset class="filter-group access-filter">
+        <legend>Model type</legend>
+        <div class="mini-segments" data-access-filter>
+          <button type="button" class="active" data-access="all">All</button>
+          <button type="button" data-access="open">Open</button>
+          <button type="button" data-access="closed">Closed</button>
+          <button type="button" data-access="unclassified" title="Published without model-access metadata">Other</button>
+        </div>
+      </fieldset>
+
+      <fieldset class="filter-group">
+        <legend>Model family</legend>
+        <div class="check-list" data-family-filters></div>
+      </fieldset>
+
+      <fieldset class="filter-group">
+        <legend>Thinking effort</legend>
+        <div class="check-list compact" data-effort-filters></div>
+      </fieldset>
+
+      <div class="filter-group effort-mode">
+        <div><strong>Show all efforts</strong><small>Turn off to keep only the highest effort for each model.</small></div>
+        <label class="switch" aria-label="Show all thinking efforts">
+          <input type="checkbox" checked data-show-all-efforts>
+          <span></span>
+        </label>
+      </div>
+    </aside>
+
+    <div class="dashboard-stage">
+      <section class="dashboard-view active" role="tabpanel" data-view-panel="leaderboard" aria-labelledby="leaderboard-title">
+        <header class="stage-header">
+          <div>
+            <span class="stage-eyebrow">Rankings</span>
+            <h2 id="leaderboard-title">Leaderboard</h2>
+            <p data-ranking-description>All included results, ordered by average performance.</p>
+          </div>
+          <div class="metric-switch" aria-label="Leaderboard ranking">
+            <button type="button" class="active" data-ranking="performance"><span>Performance</span><small>Highest first</small></button>
+            <button type="button" data-ranking="time"><span>Time</span><small>>80% performance</small></button>
+            <button type="button" data-ranking="cost"><span>Cost</span><small>>80% performance</small></button>
+          </div>
+        </header>
+
+        <form class="results-table-wrap compare-picker" id="compare-picker" action="/compare" method="get">
+          <table class="results-table">
+            <thead>
+              <tr><th class="select-col"><span class="sr-only">Compare</span></th><th class="rank-col">Rank</th><th>Model</th><th>Effort</th><th class="num">Performance</th><th class="num">Time / task</th><th class="num">Cost / task</th><th>Status</th></tr>
+            </thead>
+            <tbody data-results-body>
+              {% for result in dashboard_entries %}
+              <tr data-entry-id="{{ result.entry_id }}" data-model="{{ result.model }}" data-effort="{{ result.effort }}" data-effort-rank="{{ result.effort_rank }}" data-model-type="{{ result.model_type }}" data-performance="{{ result.performance }}" data-time="{{ result.time_per_task_sec }}" data-cost="{{ result.cost_usd if result.cost_usd is not none else '' }}">
+                <td class="select-col"><input class="compare-check" type="checkbox" name="entry" value="{{ result.entry_id }}" aria-label="Select {{ result.entry_name }}"></td>
+                <td class="rank-col ranking-position" data-rank>{{ loop.index }}</td>
+                <td class="model-cell"><i class="model-swatch" aria-hidden="true"></i><span>
+                  <a href="/entries/{{ result.entry_id }}">{{ result.model }}</a>
+                  {% if result.entry_name != result.model %}<small>{{ result.entry_name }}</small>{% endif %}
+
+                </span></td>
+                <td><span class="effort-chip">{{ result.effort }}</span></td>
+                <td class="num performance-cell">{{ "%.2f" | format(result.performance * 100) }}%</td>
+                <td class="num time-cell">{{ "%.1f" | format(result.time_per_task_sec) }}s</td>
+                <td class="num cost-cell">
+                  {{ cost_content(result) }}
+                </td>
+                <td class="status-cell">{% if not result.qualification_known %}<span class="chip muted">Score only</span>{% elif result.reference %}<span class="chip muted">Reference</span>{% elif result.qualifying %}<span class="chip pass">Qualifies</span>{% else %}<span class="chip fail">Below bar</span>{% endif %}{% if result.qualification_known and result.frontier %}<span class="chip frontier">Frontier</span>{% endif %}{% if result.provisional %}<span class="chip warn">Provisional</span>{% endif %}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+          <div class="no-results" hidden data-no-results><strong>No matching results</strong><span>Adjust the model or effort filters.</span></div>
+          <div class="compare-dock" data-compare-dock><span><b data-compare-count>0</b> selected <small data-compare-status>Select two results</small></span><button type="submit" data-compare-submit>Compare</button></div>
+        </form>
+      </section>
+
+      <section class="dashboard-view" role="tabpanel" data-view-panel="curves" aria-labelledby="curves-title" hidden>
+        <header class="stage-header chart-header">
+          <div>
+            <span class="stage-eyebrow">Trade-offs</span>
+            <h2 id="curves-title">Performance curves</h2>
+            <p>Each color is one model family. Solid lines join its thinking efforts; select the horizontal metric to compare.</p>
+          </div>
+          <div class="metric-switch curve-switch metric-rail" aria-label="Horizontal curve metric">
+            <button type="button" class="active" aria-pressed="true" data-curve="average_time">Avg time</button>
+            <button type="button" aria-pressed="false" data-curve="median_time">Median time</button>
+            <button type="button" aria-pressed="false" data-curve="cost">Cost</button>
+            <button type="button" aria-pressed="false" data-curve="turns">Turns</button>
+            <button type="button" aria-pressed="false" data-curve="release_date">Release</button>
+            <button type="button" aria-pressed="false" data-curve="output_tokens" title="Average output length in tokens">Output tokens</button>
+          </div>
+        </header>
+        <div class="curve-summary">
+          <span class="curve-keys">
+            <span data-frontier-summary><i class="frontier-key"></i>Pareto frontier</span>
+            <span data-baseline-summary hidden><i class="baseline-key"></i><b data-baseline-label></b></span>
+          </span>
+          <span data-curve-note>Higher performance and lower time are better.</span>
+        </div>
+        <div class="chart-frame">
+          <svg class="results-chart" data-results-chart viewBox="0 0 1080 620" role="img" aria-labelledby="curves-title curve-description"></svg>
+          <p id="curve-description" class="sr-only">Scatter plot comparing model performance with the selected horizontal metric.</p>
+          <div class="chart-tooltip" hidden data-chart-tooltip></div>
+        </div>
+        <div class="model-legend" data-model-legend></div>
+      </section>
+
+      <section class="dashboard-view" role="tabpanel" data-view-panel="frontier3d" aria-labelledby="frontier3d-title" hidden>
+        <header class="stage-header volume-header">
+          <div>
+            <span class="stage-eyebrow">Three objectives</span>
+            <h2 id="frontier3d-title">Pareto volume</h2>
+            <p>Cost and time recede across the floor; performance rises vertically. Drag to rotate. Compare interpolations without moving the points or camera.</p>
+          </div>
+          <div class="camera-switch" aria-label="Three-dimensional camera">
+            <button type="button" class="active" data-camera-preset="perspective">Perspective</button>
+            <button type="button" data-camera-preset="cost-performance">Cost × performance</button>
+            <button type="button" data-camera-preset="time-performance">Time × performance</button>
+            <button type="button" data-camera-preset="cost-time">Cost × time</button>
+          </div>
+        </header>
+        <div class="surface-controls" aria-label="Surface interpolation comparison">
+          <span class="surface-controls-label">Interpolation</span>
+          <div class="surface-switch" role="group" aria-label="Surface interpolation">
+            <button type="button" class="active" aria-pressed="true" data-surface-mode="smooth">Original smooth</button>
+            <button type="button" aria-pressed="false" data-surface-mode="dominance">Triangle interpolation <small>New</small></button>
+          </div>
+          <span class="surface-comparison-hint">Same measurements · same camera</span>
+        </div>
+        <div class="volume-summary">
+          <span><i class="volume-frontier-key"></i><b data-frontier3d-count>0</b> non-dominated</span>
+          <span><b data-cost3d-count>0</b> cost-known results</span>
+          <span><i class="surface-key"></i><span data-surface-label>Original smooth interpolation</span></span>
+          <span class="volume-note" data-volume-note>Original inverse-distance smoothing; switch to triangle interpolation to compare.</span>
+        </div>
+        <div class="volume-frame" data-volume-frame>
+          <svg class="results-volume" data-results-volume viewBox="0 0 1080 700" role="img" aria-labelledby="frontier3d-title frontier3d-description"></svg>
+          <p id="frontier3d-description" class="sr-only">Rotatable three-dimensional scatter plot comparing cost, time, and performance.</p>
+          <div class="chart-tooltip volume-tooltip" hidden data-volume-tooltip></div>
+        </div>
+        <div class="model-legend" data-volume-legend></div>
+      </section>
+    </div>
+  </div>
+</section>
+{% else %}
+<section class="empty-state"><h2>No published results</h2><p>Run and publish an evaluation to create this track’s first result.</p><a class="btn" href="/submit{% if track %}?track={{ track.name | urlencode }}{% endif %}">New evaluation</a></section>
+{% endif %}
+
+<script src="/static/pareto-surface.js" defer></script>
+<script src="/static/leaderboard.js{% if static_asset_versions %}?v={{ static_asset_versions['leaderboard.js'] }}{% endif %}" defer></script>
+{% endblock %}

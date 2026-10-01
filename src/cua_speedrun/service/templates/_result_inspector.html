@@ -1,0 +1,23 @@
+{% set penalized = result.measured_time_sec is not none and (result.total_time_sec - result.measured_time_sec) > 0.5 %}
+<section class="result-summary" aria-label="Result summary">
+  <header><span class="chip {% if result_visibility == 'published' %}pass{% else %}muted{% endif %}">{{ result_visibility | capitalize }}</span><span class="result-fingerprint">{{ result.submission_fingerprint[:16] if result.submission_fingerprint else "No fingerprint" }}</span></header>
+  <div class="result-metrics">
+    <article><span>Total time</span><strong>{{ "%.2f" | format(result.total_time_sec) }}s</strong><small>{{ "Charged time" if penalized else "Environment clock" }}</small></article>
+    <article><span>Score</span><strong>{{ "%.1f" | format((result.get('mean_score') if result.get('mean_score') is not none else result.success_rate) * 100) }}%</strong><small>{{ "%.1f" | format(result.success_rate * 100) }}% exact success · {{ result.num_passed }}/{{ result.num_runs }} passed</small></article>
+    <article><span>Frontier status</span><strong class="status-value">{{ insight.label }}</strong><small>{{ insight.gap_label }}</small></article>
+    <article><span>Median task</span><strong>{% if result.median_task_time_sec is not none %}{{ "%.2f" | format(result.median_task_time_sec) }}s{% else %}—{% endif %}</strong><small>{{ result.num_runs }} measured {{ "instance" if result.num_runs == 1 else "instances" }}</small></article>
+  </div>
+  {% if penalized %}<p class="result-note">Measured wall clock: {{ "%.2f" | format(result.measured_time_sec) }}s. Failed tasks are charged the frozen timeout.</p>{% endif %}
+  <div class="clock-summary">
+    <div><span>Clock attribution</span><strong>{{ insight.clock.label }}</strong></div>
+    {% if insight.clock.available %}
+    <div class="clock-track"><span class="agent" style="width:{{ insight.clock.agent_percent }}%"></span><span class="environment" style="width:{{ insight.clock.env_percent }}%"></span></div>
+    <div class="clock-values"><span>Agent {{ "%.2f" | format(insight.clock.agent_time_sec) }}s</span><span>Environment {{ "%.2f" | format(insight.clock.env_time_sec) }}s</span></div>
+    {% else %}<span class="muted-copy">Not reported</span>{% endif %}
+  </div>
+</section>
+
+<details class="contract-inspector" id="contract">
+  <summary><span>Execution contract</span><small>{{ "Partial metadata for legacy run" if contract.legacy else "Track, scoring, seeds, and execution settings" }}</small></summary>
+  <div class="contract-body"><dl class="contract-grid">{% for field in contract.fields %}<div><dt>{{ field.label }}</dt><dd>{{ field.value }}</dd></div>{% endfor %}</dl><div class="contract-season"><span>Season key</span><code>{{ contract.season_key }}</code></div></div>
+</details>

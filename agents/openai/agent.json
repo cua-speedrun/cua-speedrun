@@ -1,0 +1,7 @@
+{
+  "description": "OpenAI Responses API agent using the GA computer tool. Executes batched pixel-space actions and enforces a shared token-cost cap.",
+  "required_environment_variables": [
+    "OPENAI_API_KEY"
+  ],
+  "gpu": null
+}

@@ -1,0 +1,8 @@
+benchmarks:
+  - cua-world-26
+  - osworld-50
+  - osworld2-52
+  - my-pc-bench
+  - cua-world-offline
+  - osworld-offline
+  - osworld2-offline
