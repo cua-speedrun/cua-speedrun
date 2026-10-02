@@ -40,6 +40,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from io import BytesIO
 from pathlib import Path
 from typing import Any, Callable, Iterator
+from urllib.parse import parse_qs, urlsplit
 
 from PIL import Image
 
@@ -394,7 +395,24 @@ class Gateway:
             raise _EnvironmentOperationError(self._infrastructure_error)
         return value
 
-    def _handle_observe(self) -> dict[str, Any]:
+    def _handle_observe(self, accessibility_tree: bool = False) -> dict[str, Any]:
+        tree_result: dict[str, Any] = {}
+        tree_thread = None
+        if accessibility_tree:
+            # The tree walk runs while the screenshot is taken, so it adds
+            # nothing to the observation unless it is the slower of the two.
+            # A failed walk is a missing tree for this step, not an
+            # environment failure.
+            def fetch_tree() -> None:
+                try:
+                    tree_result["tree"] = self.adapter.accessibility_tree()
+                except NotImplementedError as exc:
+                    tree_result["tree"] = {"error": str(exc), "unsupported": True}
+                except Exception as exc:
+                    tree_result["tree"] = {"error": f"{type(exc).__name__}: {exc}"}
+
+            tree_thread = threading.Thread(target=fetch_tree, daemon=True)
+            tree_thread.start()
         obs = self._environment_operation("observation", self.adapter.observe)
         if not isinstance(obs.png, (bytes, bytearray)) or not obs.png.startswith(
             b"\x89PNG\r\n\x1a\n"
@@ -414,11 +432,20 @@ class Gateway:
         frame_path = self.artifacts_dir / f"frame_{self._frame_idx:05d}.png"
         frame_path.write_bytes(obs.png)
         self._frame_idx += 1
-        return {
+        payload = {
             "png_b64": base64.b64encode(obs.png).decode(),
-            "meta": obs.meta,
+            # Naming the saved frame lets an agent tie its own logs to it.
+            "meta": {**obs.meta, "frame": frame_path.name},
             "_frame": frame_path.name,
         }
+        if tree_thread is not None:
+            tree_thread.join()
+            tree = tree_result["tree"]
+            tree_path = frame_path.with_suffix(".a11y.json")
+            tree_path.write_text(json.dumps(tree))
+            payload["meta"] = {**payload["meta"], "accessibility_tree": tree}
+            payload["_tree"] = tree_path.name
+        return payload
 
     def _handle_step(self, body: dict[str, Any]) -> dict[str, Any]:
         actions = body.get("actions", [])
@@ -593,18 +620,42 @@ class Gateway:
 
             # -- agent-facing run plane -------------------------------------
 
-            def _route_run(self, op: str, method: str) -> None:
+            def _route_run(self, op: str, method: str, query: dict[str, list[str]]) -> None:
                 if not gateway._running() or gateway._timed_out():
                     self._reply(409, {"error": "run is not active"})
                     return
                 t_arrive = time.monotonic()
+                stepped = False
                 try:
                     if method == "GET" and op == "observe":
-                        payload = gateway._handle_observe()
+                        payload = gateway._handle_observe(
+                            query.get("accessibility_tree") == ["1"]
+                        )
                         kind, fields = "observe", {"frame": payload.pop("_frame")}
+                        if "_tree" in payload:
+                            fields["accessibility_tree"] = payload.pop("_tree")
                     elif method == "POST" and op == "step":
-                        payload = gateway._handle_step(self._read_body())
+                        body = self._read_body()
+                        payload = gateway._handle_step(body)
                         kind, fields = "step", {"actions": payload.pop("_actions")}
+                        after = body.get("observe")
+                        if isinstance(after, dict):
+                            # Return the next observation with the step, so the
+                            # agent does not spend a second round trip on it.
+                            t_step = time.monotonic()
+                            gateway.log.event(
+                                "step", t_mono_arrive=t_arrive, t_mono_complete=t_step,
+                                dur=t_step - t_arrive, **fields,
+                            )
+                            stepped = True
+                            observed = gateway._handle_observe(
+                                after.get("accessibility_tree") is True
+                            )
+                            kind, fields = "observe", {"frame": observed.pop("_frame")}
+                            if "_tree" in observed:
+                                fields["accessibility_tree"] = observed.pop("_tree")
+                            payload["observation"] = observed
+                            t_arrive = t_step
                     elif method == "POST" and op == "done":
                         payload = gateway._handle_done()
                         kind, fields = "done", {}
@@ -644,12 +695,13 @@ class Gateway:
                 # This counter exists only for untimed status reporting. It is
                 # deliberately advanced after the response is sent so the TUI
                 # cannot add work to the measured environment operation.
-                if kind == "step":
+                if kind == "step" or stepped:
                     with gateway._lock:
                         gateway._num_steps += 1
 
             def _route(self, method: str) -> None:
-                parts = self.path.strip("/").split("/")
+                url = urlsplit(self.path)
+                parts = url.path.strip("/").split("/")
                 if len(parts) == 3 and parts[0] == "_ctl":
                     if parts[1] != gateway.control_token:
                         self._reply(403, {"error": "bad control token"})
@@ -657,7 +709,7 @@ class Gateway:
                     self._route_control(parts[2], method)
                     return
                 if len(parts) == 2 and parts[0] == gateway.token:
-                    self._route_run(parts[1], method)
+                    self._route_run(parts[1], method, parse_qs(url.query))
                     return
                 self._reply(403, {"error": "bad token"})
 

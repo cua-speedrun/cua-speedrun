@@ -512,7 +512,7 @@ def pull_env_artifacts(
         rc, _ = _exec_text(
             es,
             f"cd /tmp/cs_run 2>/dev/null && rm -f {remote_tar} && "
-            f"tar czf {remote_tar} env_plane.log frame_*.png episode "
+            f"tar czf {remote_tar} env_plane.log frame_*.png frame_*.a11y.json episode "
             f"2>/dev/null; test -s {remote_tar}",
             timeout=300,
         )

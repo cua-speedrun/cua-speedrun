@@ -357,6 +357,7 @@ def test_shared_environment_timeout_uses_one_task_budget(monkeypatch, tmp_path) 
     )
     monkeypatch.setattr(run_module, "tail_sandbox_file", lambda *args, **kwargs: None)
     monkeypatch.setattr(run_module, "wait_env_healthy", lambda environment: None)
+    monkeypatch.setattr(run_module, "read_region", lambda environment: "us-east")
 
     events = _Events()
     runtime = run_module._RemoteEvaluationRuntime(
@@ -384,9 +385,62 @@ def test_shared_environment_timeout_uses_one_task_budget(monkeypatch, tmp_path) 
         grace_sec=1.5,
     )
 
-    runtime.prepare_environment(replica, (task, 7), 1)
+    prepared = runtime.prepare_environment(replica, (task, 7), 1)
 
     assert captured["sandbox_timeout_sec"] == 5701
+    assert captured["region"] is None and prepared["env_region"] == "us-east"
+
+
+def test_shared_pool_environments_follow_the_agent_region(monkeypatch, tmp_path) -> None:
+    import threading
+    from types import SimpleNamespace
+
+    from cua_speedrun.remote import run as run_module
+
+    requested: list[object] = []
+    emitted: list[str] = []
+
+    def _create_environment(*args, region=None, **kwargs):
+        requested.append(region)
+        if region == "eu-west" and refuse_agent_region:
+            raise RuntimeError("no capacity in eu-west")
+        return SimpleNamespace(sandbox=SimpleNamespace(object_id="env"), base_url="https://env.invalid")
+
+    class _Events:
+        def emit(self, kind, **kwargs) -> None:
+            emitted.append(kind)
+
+    monkeypatch.setattr(run_module, "_create_environment_sandbox", _create_environment)
+    monkeypatch.setattr(run_module, "tail_sandbox_file", lambda *args, **kwargs: None)
+    monkeypatch.setattr(run_module, "wait_env_healthy", lambda environment: None)
+    monkeypatch.setattr(run_module, "read_region", lambda environment: "eu-west")
+    task = SimpleNamespace(task_id="osworld_test", task_dir=tmp_path, env={"env_dir": str(tmp_path)},
+                           generator=None, timeout_sec=60.0, grace_sec=1.0)
+
+    def prepare(region):
+        events = _Events()
+        runtime = run_module._RemoteEvaluationRuntime(
+            agent_image=None, run_dir=tmp_path, run_id="run", region=region, events=events,
+            execution_scale=SimpleNamespace(), network_policy="host", api_domains=(),
+            eval_algorithm="shared-agent-vllm@2")
+        replica = run_module._RemoteComputeReplica(
+            index=1, events=run_module._ReplicaEvents(events, 1), total_timeout=600)
+        # The agent started in eu-west while its warmup thread was running.
+        replica.warm_thread = threading.Thread(target=lambda: None)
+        replica.region = "eu-west"
+        replica.region_known.set()
+        return runtime.prepare_environment(replica, (task, 7), 1)
+
+    refuse_agent_region = False
+    assert prepare(None)["env_region"] == "eu-west" and requested == ["eu-west"]
+    refuse_agent_region = True
+    requested.clear()
+    prepare(None)
+    assert requested == ["eu-west", None] and "env_region_fallback" in emitted
+    requested.clear()
+    with pytest.raises(RuntimeError, match="no capacity"):
+        prepare("eu-west")  # an explicit --region stays strict
+    assert requested == ["eu-west"]
 
 
 def test_worker_topology_key_resolves_modal_native() -> None:

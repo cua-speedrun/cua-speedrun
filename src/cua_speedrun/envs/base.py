@@ -59,6 +59,14 @@ class EnvAdapter(ABC):
             "seeded tasks that inspect the screen need it"
         )
 
+    def accessibility_tree(self) -> dict[str, Any]:
+        """Return the front window's accessibility tree for an agent that asks
+        for it with its observation. Optional; an agent falls back to reading
+        the screenshot on backends that do not support it."""
+        raise NotImplementedError(
+            f"{type(self).__name__} does not support accessibility trees"
+        )
+
     def exec_read(self, command: str) -> str:
         """Run a shell command inside the environment and return its output,
         for a host-side seeded checker that inspects filesystem or command

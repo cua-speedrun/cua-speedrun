@@ -58,7 +58,7 @@ def test_all_bundled_agents_are_valid_and_have_metadata():
     names = {item["name"] for item in agents}
     assert names == {
         "autoglm_v", "claude", "claude_code", "codex_cli", "gemini",
-        "gemini35", "gemini3_flash_preview", "glm5v_turbo", "kimi_k3",
+        "gemini35", "gemini3_flash_preview", "glm5v_turbo", "jev", "kimi_k3",
         "meta", "minimax_m3", "openai", "qwen35", "qwen3vl", "yutori_n2",
     }
     assert names == {path.name for path in (ROOT / "agents").iterdir() if path.is_dir()}

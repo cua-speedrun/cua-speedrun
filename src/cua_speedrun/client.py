@@ -73,18 +73,34 @@ class Computer:
 
     # -- core operations ---------------------------------------------------
 
-    def observe(self) -> dict[str, Any]:
-        """Returns {"png": bytes, "meta": dict}."""
-        payload = self._request("GET", "observe").json()
+    def observe(self, accessibility_tree: bool = False) -> dict[str, Any]:
+        """Returns {"png": bytes, "meta": dict}.
+
+        With accessibility_tree, meta["accessibility_tree"] also holds the front
+        window's tree, or an "error" where the environment has none. Fetching it
+        is part of the timed observation.
+        """
+        path = "observe?accessibility_tree=1" if accessibility_tree else "observe"
+        payload = self._request("GET", path).json()
         return {"png": base64.b64decode(payload["png_b64"]), "meta": payload["meta"]}
 
-    def step(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
+    def step(
+        self,
+        actions: list[dict[str, Any]],
+        observe: bool = False,
+        accessibility_tree: bool = False,
+    ) -> dict[str, Any]:
+        """With observe, the result's "observation" is the next observation,
+        taken right after the actions, in the same round trip."""
+        body: dict[str, Any] = {"actions": actions}
+        if observe:
+            body["observe"] = {"accessibility_tree": accessibility_tree}
         try:
             response = self._request(
                 "POST",
                 "step",
                 retry_on=requests.exceptions.ConnectTimeout,
-                json={"actions": actions},
+                json=body,
             )
         except requests.exceptions.ConnectionError:
             # The gateway may already have executed the actions. Never replay
@@ -98,7 +114,14 @@ class Computer:
                     "step_outcome": "unknown",
                 },
             }
-        return response.json()
+        result = response.json()
+        observation = result.get("observation")
+        if observation is not None:
+            result["observation"] = {
+                "png": base64.b64decode(observation["png_b64"]),
+                "meta": observation["meta"],
+            }
+        return result
 
     def done(self) -> None:
         self._request("POST", "done")

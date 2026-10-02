@@ -1,0 +1,151 @@
+schema_version: 1
+prepare:
+  default_environment: modal-native
+  data:
+  - script: scripts/import_osworld_eval.py
+    outputs:
+    - benchmark-assets/osworld/manifest.yaml
+  modal:
+  - script: scripts/build_osworld_modal_qcow2.py
+    args:
+    - --reuse
+  modal-native:
+  - script: scripts/import_desktop_image.py
+    independent: true
+    args:
+    - --image
+    - osworld
+  local:
+  - script: scripts/prepare_osworld_qcow2.sh
+    args:
+    - --output
+    - '{osworld_image}'
+name: osworld-jev-50
+version: '0.1'
+description: The osworld-50 tasks with a 300 ms wait after each action, for the Jev
+  agent.
+source_benchmark:
+  name: osworld
+  version: '0.1'
+  path: benchmark-assets/osworld
+  repository: https://github.com/xlang-ai/OSWorld
+  commit: 315a7603173feadf1b8a85cbc006c93ffe1dc1a1
+selection:
+  method: energy-distance selection
+  selected_task_count: 50
+  ordering: canonical source benchmark manifest
+  task_ids_sha256: 8a577f2e475111d89c9840783fa431cd6f31655f071bdcc68fbc361a2ce2d22d
+materializer:
+  path: scripts/build_osworld_subset.py
+  function: materialize
+  inputs:
+  - benchmark-assets/osworld/manifest.yaml
+  - benchmarks/osworld-image.json
+  - benchmarks/osworld-tasks.json
+  - scripts/build_osworld_subset.py
+  - scripts/import_osworld_eval.py
+  - scripts/osworld_shared/osworld_setup.py
+  - scripts/osworld_shared/osworld_verifier.py
+  - scripts/osworld_task_patches/multi_apps__48d05431-6cd5-4e76-82eb-12b60d823f7d.json
+tasks:
+- id: osworld_chrome_06fe7178-4491-4589-810f-2e2bc9502122
+  source_sha256: cdd32f2f484f88400f1f9fae987f476e97daa32426460bdda856214492816199
+- id: osworld_chrome_2ae9ba84-3a0d-4d4c-8338-3a1478dc5fe3
+  source_sha256: 1e7a3fe23335f9aa3df0d33beaf3b05e300adbd8ab7161b09d7e4c1e53eaef54
+- id: osworld_chrome_af630914-714e-4a24-a7bb-f9af687d3b91
+  source_sha256: bc6981183a2af18378bdcc30caaa2119ea9e3f9874fb75fa25c9e4698e372e7e
+- id: osworld_chrome_3720f614-37fd-4d04-8a6b-76f54f8c222d
+  source_sha256: 5b5a234cc68d1735adfa89e16397cc6ecfa63c155f62b62140649235cbf28be6
+- id: osworld_chrome_44ee5668-ecd5-4366-a6ce-c1c9b8d4e938
+  source_sha256: 60e620e5203c71c8249c123cb476ad20e702e8e72d1c1cc9c77030dcd807b47f
+- id: osworld_gimp_554785e9-4523-4e7a-b8e1-8016f565f56a
+  source_sha256: 4c1f4c4538078a51d448c82e9ea0da24ee637f38348e64bbebc60554813e115b
+- id: osworld_gimp_a746add2-cab0-4740-ac36-c3769d9bfb46
+  source_sha256: d1e7a57aa40ecf1ef75ee5437aabf5c004c8f88459b2c6e8016bb81ac3bdfd9b
+- id: osworld_gimp_734d6579-c07d-47a8-9ae2-13339795476b
+  source_sha256: 488405a470a341eea429c3f5bc8c1d96f263b305b16966d32e2f31000dab021d
+- id: osworld_gimp_045bf3ff-9077-4b86-b483-a1040a949cff
+  source_sha256: b3a425e84961e60a1c76f54576522d36bfd154693e9e70015c76cd9d9da7748f
+- id: osworld_libreoffice_calc_535364ea-05bd-46ea-9937-9f55c68507e8
+  source_sha256: 52940139cac4fa7426b9b77fc97a3808fee15bccc067ce46dd5418ad15b5fd14
+- id: osworld_libreoffice_calc_abed40dc-063f-4598-8ba5-9fe749c0615d
+  source_sha256: e0f67b3c0dfdfff58a311fb78e9371dff848643a04ad489ea35f050e08bc7d2c
+- id: osworld_libreoffice_calc_7efeb4b1-3d19-4762-b163-63328d66303b
+  source_sha256: c1a8af1bfe3309391da542d024a94a468843f15b05a732b35fb54e9c362bf47c
+- id: osworld_libreoffice_calc_1de60575-bb6e-4c3d-9e6a-2fa699f9f197
+  source_sha256: de42c3a053a701e358a182c28bc53e97655c5020077e1e08a6063efae440350c
+- id: osworld_libreoffice_calc_1e8df695-bd1b-45b3-b557-e7d599cf7597
+  source_sha256: 4a3eed6193cf7f9468acddbc1fbbac82743bc7ce7df254c840f90c5140f97438
+- id: osworld_libreoffice_calc_8b1ce5f2-59d2-4dcc-b0b0-666a714b9a14
+  source_sha256: 9f9003c26a3132e563992f2caff5b11056f795f368a58188ad495536bbe18e72
+- id: osworld_libreoffice_calc_0326d92d-d218-48a8-9ca1-981cd6d064c7
+  source_sha256: e5d6ba86094773b8a295916fe8b815928207b8df5f3269e0c33690ebd4223fa6
+- id: osworld_libreoffice_calc_a9f325aa-8c05-4e4f-8341-9e4358565f4f
+  source_sha256: 2bbeb9baea9ab5612fc303edbf426f38b7e1500919a632c609687e4513f5a1ee
+- id: osworld_libreoffice_calc_4de54231-e4b5-49e3-b2ba-61a0bec721c0
+  source_sha256: 0da0d4ff8a0c21d17d9c9e22d0c9aa5811e6439db107ecc217405d09dcfbd2e7
+- id: osworld_libreoffice_calc_3a7c8185-25c1-4941-bd7b-96e823c9f21f
+  source_sha256: bc461907f7d18416538c36a4e608b336bd90647efbbee4953aec164f59acd1bc
+- id: osworld_libreoffice_impress_455d3c66-7dc6-4537-a39a-36d3e9119df7
+  source_sha256: eb7fa39b952d12049b221a21b3935049ce69e83079d8eb64952e0f2cc55e8883
+- id: osworld_libreoffice_impress_a097acff-6266-4291-9fbd-137af7ecd439
+  source_sha256: ac35dc3753ee857cfb51ad9f1284f55a0df936bae4e2af9473ea8bcecf585320
+- id: osworld_libreoffice_impress_986fc832-6af2-417c-8845-9272b3a1528b
+  source_sha256: 4832941e281ab61e60d385f5963012dc8f6a7c79f6c9543f9f4c41d869f09974
+- id: osworld_libreoffice_impress_a434992a-89df-4577-925c-0c58b747f0f4
+  source_sha256: 9bba6daa9819a7c0a1d0d4fe2cfdf1814db2a2679e04841af159a5a8cdbdd85a
+- id: osworld_libreoffice_impress_b8adbc24-cef2-4b15-99d5-ecbe7ff445eb
+  source_sha256: a93c3b7cdea2f5aec211d0ed3b983e9437d8b9b28c806a2339883aed4a3702f3
+- id: osworld_libreoffice_impress_39be0d19-634d-4475-8768-09c130f5425d
+  source_sha256: 875be11cd9b384b5edb102a6e17556804c8677debcc8a610a55078ce1fd7cad4
+- id: osworld_libreoffice_impress_af2d657a-e6b3-4c6a-9f67-9e3ed015974c
+  source_sha256: 5764462f0976e873e8d794ec96fdc7fd60cfc03545ac15f4b192138da0b6a4e3
+- id: osworld_libreoffice_writer_0810415c-bde4-4443-9047-d5f70165a697
+  source_sha256: c08021e5bdff32266538236da9ea67d7013e9a642f1c15fda57d29cde088095b
+- id: osworld_libreoffice_writer_0e47de2a-32e0-456c-a366-8c607ef7a9d2
+  source_sha256: ffbb9408586bc831ef85cd595f93add99c87e9625e9cf1605bdc9515373d8ce5
+- id: osworld_libreoffice_writer_72b810ef-4156-4d09-8f08-a0cf57e7cefe
+  source_sha256: 29308e9aeeffc0bbfe04d2eb910e574b612fd2d3bc7d710b2856fafeb6bc05d7
+- id: osworld_libreoffice_writer_adf5e2c3-64c7-4644-b7b6-d2f0167927e7
+  source_sha256: acc0989b801c7f0003eeaa9c1e71e17920d3e78520638dea5a0e7d17ef2117cb
+- id: osworld_libreoffice_writer_ecc2413d-8a48-416e-a3a2-d30106ca36cb
+  source_sha256: 511156980bd7400739529fdc050c4a70d45640fe3a29f7a35cd4de65f8f7cb3a
+- id: osworld_multi_apps_d9b7c649-c975-4f53-88f5-940b29c47247
+  source_sha256: 0a3f7b87132117e3c7f2a7c7e553326a4815c7f16d01fc58a9cd706ebc436457
+- id: osworld_multi_apps_e135df7c-7687-4ac0-a5f0-76b74438b53e
+  source_sha256: f3cc2946e5559f783f3d095d53254ecae6345d82fcc8c819802949932d3d65fd
+- id: osworld_multi_apps_6d72aad6-187a-4392-a4c4-ed87269c51cf
+  source_sha256: 8e23dcd2e5d35074e4fa4a158109c0fb9180597f5b607405dfffd0611493d842
+- id: osworld_multi_apps_48d05431-6cd5-4e76-82eb-12b60d823f7d
+  source_sha256: e4bdfedfeab027d2ce6c1ffd7af37d239f6c39f1b898be5689a2c973bbca85ab
+- id: osworld_multi_apps_81c425f5-78f3-4771-afd6-3d2973825947
+  source_sha256: 038e882447d93694857b8091b0a9711d1883e75ba34e2f59b36122817ef7efb6
+- id: osworld_multi_apps_f5c13cdd-205c-4719-a562-348ae5cd1d91
+  source_sha256: 7964973a1cd1cf8a91e28a5b4f621ed20bedff1c1da90826674407692500e5de
+- id: osworld_multi_apps_42f4d1c7-4521-4161-b646-0a8934e36081
+  source_sha256: 8e7bcaf02f2a8452e7934b5d9b5a1e9f2bddc490d28fdc5e23723a0b16d9f0d4
+- id: osworld_os_b6781586-6346-41cd-935a-a6b1487918fc
+  source_sha256: 213b0218ecec7da489aff50605bd65c3313df0f1485f07f40d55dadd3166410a
+- id: osworld_thunderbird_dfac9ee8-9bc4-4cdc-b465-4a4bfcd2f397
+  source_sha256: 27d9990147bf1a7ff06043fe3c13501ff93b85bddf452baa474f6f9849de1bf8
+- id: osworld_thunderbird_7b1e1ff9-bb85-49be-b01d-d6424be18cd0
+  source_sha256: ad44e9ca994fb8c29a7dd47650abf51b24bd35b0d9c6199af34441e51c864ad1
+- id: osworld_thunderbird_9b7bc335-06b5-4cd3-9119-1a649c478509
+  source_sha256: 11b6a4aac940052c470aea312c24c924bcaac68cfa8155e0743387e8b59c8beb
+- id: osworld_thunderbird_f201fbc3-44e6-46fc-bcaa-432f9815454c
+  source_sha256: 4f2ef2802868d9ea186fbd2393f9d13df21a5e589f10ebee5c7ab5326d2e4cae
+- id: osworld_thunderbird_a1af9f1c-50d5-4bc3-a51e-4d9b425ff638
+  source_sha256: 2068d9b85aa7f530e5d7ef4ce53fe166b79a4f7a03ca3c6aeb9aa9f2f44082c2
+- id: osworld_vlc_fba2c100-79e8-42df-ae74-b592418d54f4
+  source_sha256: f74304e4313166114ce1ba2b46e2cb4f4e84075d6e4aeb8fcdc018a20a22b513
+- id: osworld_vlc_d06f0d4d-2cd5-4ede-8de9-598629438c6e
+  source_sha256: 920e3db4807dc4e6a4c7fba41867d651587b29694694699c0d17d11960344d11
+- id: osworld_vlc_cb130f0d-d36f-4302-9838-b3baf46139b6
+  source_sha256: 3a7ce7eb76ed2687975072ed58982ab73690b21202b52875b899a2ee27f3ce6e
+- id: osworld_vs_code_0ed39f63-6049-43d4-ba4d-5fa2fe04a951
+  source_sha256: 2d6a93642f7cc076b5d5159d38c21084c1a9c7de8976d385620ceb484ff2a3fb
+- id: osworld_vs_code_5e2d93d8-8ad0-4435-b150-1692aacaa994
+  source_sha256: 3ad3afa94592776e9467c3303d22a6ef1d8a6161254812e3ab502e991ac8c185
+- id: osworld_vs_code_ec71221e-ac43-46f9-89b8-ee7d80f7e1c5
+  source_sha256: 858deae82756197395d2dfd905aca4005699eddfe5eff94c417a5e131d674b56
+action_settle_ms: 300

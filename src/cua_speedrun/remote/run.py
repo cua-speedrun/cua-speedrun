@@ -13,13 +13,16 @@ console sink renders the familiar CLI lines, events.jsonl lands in the run
 directory, and the platform worker attaches a database sink for live
 status. Timing truth stays in the gateway's run logs; events only report.
 
-Per-task order of operations, which is what keeps the timing honest. Two
-placements, chosen by whether the submission needs a GPU:
+Per-task order of operations, which is what keeps the timing honest. Isolated
+tasks use one of two placements, chosen by whether the submission needs a GPU:
 
 - CPU (env-first): create the env sandbox, then spawn + warm the agent
   sandbox pinned to the env's actual region. Env boot and warmup overlap.
 - GPU (gpu-first): acquire the GPU first, then create the env in its region.
   Env boot overlaps the submission's warmup.
+
+A shared agent pool (shared-bounded) starts each replica's agent first and
+creates every environment it serves in that agent's region.
 
 In both placements everything above is untimed; only when both sides are
 ready does the executor arm the clock and deliver the go-signal that
@@ -997,6 +1000,10 @@ class _RemoteComputeReplica:
     warm_thread: threading.Thread | None = None
     heartbeat_thread: threading.Thread | None = None
     recovery_lock: Any = field(default_factory=threading.Lock, repr=False)
+    # The region the replica's agent actually runs in; its environments are
+    # created there so the timed agent-to-gateway hop stays in one region.
+    region: str | None = None
+    region_known: threading.Event = field(default_factory=threading.Event)
 
 
 class _RemoteEvaluationRuntime:
@@ -1082,6 +1089,11 @@ class _RemoteEvaluationRuntime:
 
     def _launch_replica(self, replica):
         replica.shared.clear()
+        replica.region_known.clear()
+
+        def started(actual_region: str | None) -> None:
+            replica.region = actual_region
+            replica.region_known.set()
 
         def warm() -> None:
             try:
@@ -1106,9 +1118,13 @@ class _RemoteEvaluationRuntime:
                     on_event=lambda kind, **payload: replica.events.emit(
                         kind, **payload
                     ),
+                    on_started=started,
                 )
             except BaseException as exc:
                 replica.shared["error"] = exc
+            finally:
+                # Never leave an environment waiting on a warmup that failed.
+                replica.region_known.set()
         replica.warm_thread = threading.Thread(target=warm, daemon=True)
         replica.warm_thread.start()
 
@@ -1220,27 +1236,42 @@ class _RemoteEvaluationRuntime:
         env_log_stop = threading.Event()
         env_log_thread = None
         try:
-            environment = _create_environment_sandbox(
-                self.environment_backend,
-                env_local_dir=env_dir,
-                env_spec=task.env,
-                seed=seed,
-                timeout_sec=task.timeout_sec,
-                grace_sec=task.grace_sec,
-                generator_local=generator_local,
-                task_label=task.task_id,
-                region=self.region,
-                sandbox_timeout_sec=max(
-                    3600,
-                    int(
-                        task.timeout_sec
-                        + task.grace_sec
-                        + VERIFIER_TIMEOUT_SEC
-                        + 1800
+            def create(region):
+                return _create_environment_sandbox(
+                    self.environment_backend,
+                    env_local_dir=env_dir,
+                    env_spec=task.env,
+                    seed=seed,
+                    timeout_sec=task.timeout_sec,
+                    grace_sec=task.grace_sec,
+                    generator_local=generator_local,
+                    task_label=task.task_id,
+                    region=region,
+                    sandbox_timeout_sec=max(
+                        3600,
+                        int(
+                            task.timeout_sec
+                            + task.grace_sec
+                            + VERIFIER_TIMEOUT_SEC
+                            + 1800
+                        ),
                     ),
-                ),
-                runtime_env=self.environment_runtime,
-            )
+                    runtime_env=self.environment_runtime,
+                )
+            region = self.region
+            if region is None and replica.warm_thread is not None:
+                # Untimed: wait until the agent is running and follow it.
+                replica.region_known.wait(GPU_WARMUP_TIMEOUT_SEC + 60)
+            if region is None:
+                region = replica.region
+            try:
+                environment = create(region)
+            except Exception as exc:
+                if self.region is not None or region is None:
+                    raise  # an explicit --region stays strict
+                replica.events.emit("env_region_fallback", task_key=task_key,
+                                    region=region, error=repr(exc))
+                environment = create(None)
             replica.events.emit(
                 "env_created",
                 task_key=task_key,
@@ -1267,8 +1298,10 @@ class _RemoteEvaluationRuntime:
             raise
         boot_sec = round(time.monotonic() - started, 3)
         replica.progress["ready"] += 1
+        env_region = read_region(environment)
         replica.events.emit(
-            "env_ready", task_key=task_key, env_boot_sec=boot_sec
+            "env_ready", task_key=task_key, env_boot_sec=boot_sec,
+            env_region=env_region,
         )
         return {
             "task": task,
@@ -1276,6 +1309,7 @@ class _RemoteEvaluationRuntime:
             "task_key": task_key,
             "task_dir": task_dir,
             "es": environment,
+            "env_region": env_region,
             "env_boot_sec": boot_sec,
             "env_log_stop": env_log_stop,
             "env_log_thread": env_log_thread,
@@ -1417,6 +1451,7 @@ class _RemoteEvaluationRuntime:
             "env_sandbox_id": getattr(environment.sandbox, "object_id", None),
             "agent_sandbox_id": getattr(agent.sandbox, "object_id", None),
             "agent_region": agent.region,
+            "env_region": prepared.get("env_region"),
         }
         try:
             control = GatewayControl(

@@ -1,0 +1,14 @@
+{
+  "description": "TypeSafe Jev, through OpenRouter, choosing every action from the front window's accessibility tree, or from the text and icons Cua's OmniParser-based parser reads off the screenshot when the tree is empty. Jev never sees pixels and types only strings taken from the task.",
+  "gpu": "L40S",
+  "required_environment_variables": [
+    "OPENROUTER_API_KEY"
+  ],
+  "optional_environment_variables": [
+    "JEV_MODEL",
+    "JEV_URL",
+    "JEV_MAX_STEPS",
+    "JEV_ELEMENTS",
+    "JEV_GUIDES"
+  ]
+}

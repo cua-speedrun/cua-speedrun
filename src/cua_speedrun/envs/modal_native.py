@@ -17,6 +17,7 @@ import importlib.util
 import json
 import os
 import shlex
+import struct
 import subprocess
 import time
 from pathlib import Path
@@ -119,15 +120,25 @@ class ModalNativeAdapter(EnvAdapter):
             png = handle.read()
         if png[:8] != _PNG_MAGIC:
             raise RuntimeError("scrot did not produce a PNG")
-        return Observation(png=png, meta={"resolution": self._geometry()})
+        # The PNG header carries the capture's size; no second guest command.
+        width, height = struct.unpack(">II", png[16:24])
+        return Observation(png=png, meta={"resolution": [width, height]})
 
-    def _geometry(self) -> list[int]:
-        result = self._run_user("xdotool getdisplaygeometry", timeout=15)
-        parts = result.stdout.decode(errors="replace").split()
-        try:
-            return [int(parts[0]), int(parts[1])]
-        except (IndexError, ValueError) as exc:
-            raise RuntimeError("could not read the desktop resolution") from exc
+    def accessibility_tree(self) -> dict[str, Any]:
+        # Same delivery as the keyboard script: the guest module's own source.
+        source = (Path(__file__).with_name("_atspi_tree.py").read_text()
+                  + "\nmain()\n")
+        started = time.monotonic()
+        # timeout kills the walker inside the guest too, so a walk stuck in one
+        # accessibility call never keeps loading the app after we give up.
+        result = self._run_user(
+            f"timeout -k 0.5 1.5 python3 -c {shlex.quote(source)}", timeout=5
+        )
+        # A login shell may print first; the walk prints one JSON line last.
+        tree = json.loads(result.stdout.decode(errors="replace").strip().splitlines()[-1])
+        # The walk's own time is "seconds"; this adds starting Python in the guest.
+        tree["fetch_seconds"] = time.monotonic() - started
+        return tree
 
     def step(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
         started = time.monotonic()

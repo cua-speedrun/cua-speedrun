@@ -54,6 +54,9 @@ def materialize(source_path: Path, out: Path) -> Path:
     out = Path(out).resolve()
     spec = _read_spec(source_path)
     root = _repository_root(source_path)
+    settle_ms = spec.get("action_settle_ms")
+    if settle_ms is not None and (type(settle_ms) is not int or settle_ms < 0):
+        raise ValueError(f"{source_path}: action_settle_ms must be a non-negative integer")
     source_spec = spec["source_benchmark"]
     source_root = (root / str(source_spec["path"])).resolve()
     if not source_root.is_relative_to(root.resolve()):
@@ -123,6 +126,9 @@ def materialize(source_path: Path, out: Path) -> Path:
         task_yaml = copied_task / "task.yaml"
         task = yaml.safe_load(task_yaml.read_text()) or {}
         task["env"]["env_dir"] = "${BENCHMARK_DIR}/environment"
+        if settle_ms is not None:
+            # The desktop waits this long after every action; modal-native defaults to 5000.
+            task["env"]["action_settle_ms"] = settle_ms
         task_yaml.write_text(yaml.safe_dump(task, sort_keys=False, allow_unicode=True))
         copied_env_task = environment / "tasks" / name
         shutil.copytree(
