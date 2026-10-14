@@ -23,6 +23,8 @@ def plan_for_catalog_rows(
     allocate_gpu: bool = True,
     gpu: str | None = None,
     eval_algorithm: str | None = None,
+    *,
+    region: str | None = None,
 ) -> RunPlan:
     if gpu is not None:
         gpu = gpu.strip()
@@ -34,6 +36,15 @@ def plan_for_catalog_rows(
         compute_placement or MODAL_PLACEMENT,
         environment_placement or MODAL_PLACEMENT,
     )
+    server_config = dict(track.server_config or {})
+    if region is not None:
+        if not isinstance(region, str) or not region.strip():
+            raise ValueError("region must be a non-empty string")
+        if topology.compute.mode != "remote" or topology.environment.mode != "remote":
+            raise ValueError("region selection requires remote placement")
+        # Freeze an operator's per-run request without changing the track or
+        # retroactively modifying a previously queued evaluation.
+        server_config["region"] = region.strip()
     # Submission code may use a local model, an external API, both, or neither.
     # Networking is therefore an execution capability, not an agent class or
     # a reason to create a provider-specific track.
@@ -58,7 +69,7 @@ def plan_for_catalog_rows(
         success_bar=float(track.success_bar if track.success_bar is not None else 0.9),
         failure_costs_timeout=bool(track.failure_costs_timeout),
         seed_policy=track.seed_policy or "scored-without-replacement@1",
-        server_config=track.server_config or {},
+        server_config=server_config,
         agent_runtime=agent_runtime,
         execution_topology=topology.contract_dict(),
         backend=topology.backend,

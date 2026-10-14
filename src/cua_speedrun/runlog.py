@@ -8,11 +8,14 @@ durations are only ever computed within that one clock.
 
 from __future__ import annotations
 
+import copy
 import json
 import threading
 import time
 from pathlib import Path
 from typing import Any
+
+from cua_speedrun.recording import OrderedRecorder
 
 
 class RunLogWriter:
@@ -22,17 +25,45 @@ class RunLogWriter:
         self.path = path
         self._lock = threading.Lock()
         self._fh = open(path, "a", encoding="utf-8")
+        self._recorder: OrderedRecorder | None = None
+
+    def enable_async(self) -> None:
+        """Called during untimed preparation, before handler threads start."""
+        if self._recorder is None:
+            self._recorder = OrderedRecorder()
 
     def event(self, kind: str, **fields: Any) -> None:
         record = {"event": kind, "wall_ts": time.time(), **fields}
+        if self._recorder is not None:
+            self._recorder.submit(self._write, copy.deepcopy(record))
+        else:
+            self._write(record)
+
+    def _write(self, record: dict) -> None:
         line = json.dumps(record, ensure_ascii=False, default=str)
         with self._lock:
             self._fh.write(line + "\n")
             self._fh.flush()
 
-    def close(self) -> None:
+    def artifact(self, path: Path, data: bytes) -> None:
+        if self._recorder is not None:
+            self._recorder.submit(path.write_bytes, bytes(data))
+        else:
+            path.write_bytes(data)
+
+    def flush(self) -> None:
+        if self._recorder is not None:
+            self._recorder.flush()
         with self._lock:
-            self._fh.close()
+            self._fh.flush()
+
+    def close(self) -> None:
+        try:
+            if self._recorder is not None:
+                self._recorder.close()
+        finally:
+            with self._lock:
+                self._fh.close()
 
 
 def load_runlog(path: Path) -> list[dict[str, Any]]:
@@ -77,6 +108,23 @@ def summarize(events: list[dict[str, Any]]) -> dict[str, Any]:
     env_time = sum(
         ev.get("dur", 0.0) for ev in steps + observes + episode_transitions
     )
+    response_timing = any(
+        event.get("timing") == "gateway-response-interval-union"
+        for event in by_kind.get("io_contract", [])
+    )
+    if response_timing and t0 is not None and t_end is not None:
+        # Include encoding and socket writes. Concurrent requests overlap in
+        # wall time; their union, not their sum, is attributable to the gateway.
+        intervals = sorted(
+            (max(t0, ev["t_mono_arrive"]), min(t_end, ev["t_mono_sent"]))
+            for ev in by_kind.get("gateway_response", [])
+        )
+        env_time, previous_end = 0.0, t0
+        for start, end in intervals:
+            env_time += max(0.0, end - max(start, previous_end))
+            previous_end = max(previous_end, end)
+        # The remaining agent-side time still contains network and client
+        # work; it is not a measurement of model inference alone.
     agent_time = (task_time - env_time) if task_time is not None else None
 
     return {

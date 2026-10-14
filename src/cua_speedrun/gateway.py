@@ -43,7 +43,9 @@ from typing import Any, Callable, Iterator
 
 from PIL import Image
 
-from cua_speedrun.envs.base import EnvAdapter, Verdict
+from cua_speedrun.envs.base import EnvAdapter, Observation, Verdict
+from cua_speedrun.fast_io import CONTENT_TYPE, encode_observation
+from cua_speedrun.images import image_mime_type, image_suffix
 from cua_speedrun.runlog import RunLogWriter
 
 
@@ -79,6 +81,11 @@ class Gateway:
     ):
         self.adapter = adapter
         self.log = log
+        self.fast_io = bool(getattr(adapter, "fast_io", False))
+        if self.fast_io:
+            self.log.enable_async()
+            self.log.event("io_contract", version="fast-io-v3", wire_content_type=CONTENT_TYPE,
+                           timing="gateway-response-interval-union")
         self.artifacts_dir = artifacts_dir
         self.runlog_path = log.path
         self.timeout_sec = timeout_sec
@@ -112,6 +119,8 @@ class Gateway:
         self._num_steps = 0
         self._next_operation_id = 0
         self._active_operations: dict[int, tuple[str, float, float]] = {}
+        self._responses = threading.Condition()
+        self._active_responses = 0
         # A benchmark may divide one task into several independent agent
         # episodes on the same live environment.  Existing adapters never
         # enter this path, so their one-agent/one-done lifecycle is unchanged.
@@ -214,6 +223,9 @@ class Gateway:
                     # A timed-out action may still be mutating the environment.
                     # The existing verifier deadline bounds this wait too.
                     with self._action_lock:
+                        if self.fast_io:
+                            self.adapter.flush_recording()
+                            self.log.flush()
                         if self._multi_episode:
                             # Do not evaluate during a phase transition.
                             with self._episode_lock:
@@ -252,12 +264,29 @@ class Gateway:
                 f"gateway finisher failed: {type(exc).__name__}: {exc}"
             )
         finally:
+            if self.fast_io:
+                try:
+                    # /done can finish the checker before its own HTTP reply.
+                    # Do not expose fully_done until every accepted response
+                    # and its exact archived frame have been recorded.
+                    with self._responses:
+                        drained = self._responses.wait_for(
+                            lambda: self._active_responses == 0,
+                            timeout=self.environment_operation_timeout_sec,
+                        )
+                    if not drained:
+                        raise TimeoutError("gateway responses did not finish")
+                    self.adapter.flush_recording()
+                    self.log.flush()
+                except Exception as exc:
+                    self._record_infrastructure_error(f"recording drain failed: {exc}")
             if self._infrastructure_error is not None:
                 try:
                     self.log.event(
                         "infrastructure_error",
                         error=self._infrastructure_error,
                     )
+                    self.log.flush()
                 except Exception:
                     pass
             self._fully_done.set()
@@ -300,6 +329,8 @@ class Gateway:
     def shutdown(self) -> None:
         self._server.shutdown()
         self._server.server_close()
+        if self.fast_io:
+            self.log.flush()
 
     def status(self) -> dict[str, Any]:
         st = {
@@ -394,33 +425,45 @@ class Gateway:
             raise _EnvironmentOperationError(self._infrastructure_error)
         return value
 
-    def _handle_observe(self) -> dict[str, Any]:
-        obs = self._environment_operation("observation", self.adapter.observe)
-        if not isinstance(obs.png, (bytes, bytearray)) or not obs.png.startswith(
-            b"\x89PNG\r\n\x1a\n"
-        ):
-            message = "environment returned an invalid PNG observation"
-            self._record_infrastructure_error(message)
-            raise _EnvironmentOperationError(message)
+    def _handle_observe(self, *, binary: bool = False) -> dict[str, Any]:
+        operation = self.adapter.observe if binary else self.adapter.observe_png
+        obs = self._environment_operation("observation", operation)
+        return self._record_observation(obs, binary=binary)
+
+    def _record_observation(self, obs: Observation, *, binary: bool) -> dict[str, Any]:
         try:
-            with Image.open(BytesIO(obs.png)) as image:
-                if image.format != "PNG":
-                    raise OSError(f"expected PNG, received {image.format or 'unknown'}")
+            data = obs.image
+            mime_type = image_mime_type(data)
+            meta = obs.meta
+            # Old agents explicitly use the PNG JSON interface. The v2
+            # binary path returns the original JPEG without any transcoding.
+            if not binary and mime_type != "image/png":
+                data = obs.png
+                meta = {**meta, "format": "png", "source_encoding": meta.get("encoding"),
+                        "encoding": {"format": "png", "compress_level": 1,
+                                     "lossless": False, "converted_from": "jpeg"}}
+                mime_type = "image/png"
+            with Image.open(BytesIO(data)) as image:
+                if Image.MIME[image.format] != mime_type:
+                    raise OSError("image format does not match its MIME type")
                 image.verify()
-        except (OSError, SyntaxError, ValueError) as exc:
-            message = f"environment returned a corrupt PNG observation: {exc}"
+        except (AttributeError, TypeError, OSError, SyntaxError, ValueError) as exc:
+            message = f"environment returned an invalid screenshot: {exc}"
             self._record_infrastructure_error(message)
             raise _EnvironmentOperationError(message) from exc
-        frame_path = self.artifacts_dir / f"frame_{self._frame_idx:05d}.png"
-        frame_path.write_bytes(obs.png)
-        self._frame_idx += 1
+        with self._lock:
+            frame_path = self.artifacts_dir / f"frame_{self._frame_idx:05d}{image_suffix(mime_type)}"
+            self._frame_idx += 1
+        self.log.artifact(frame_path, data)
         return {
-            "png_b64": base64.b64encode(obs.png).decode(),
-            "meta": obs.meta,
+            **({"_image": data} if binary else {"png_b64": base64.b64encode(data).decode()}),
+            "meta": meta,
             "_frame": frame_path.name,
+            "_timings": obs.timings,
+            "_image_info": {"mime_type": mime_type, "encoding": meta.get("encoding")},
         }
 
-    def _handle_step(self, body: dict[str, Any]) -> dict[str, Any]:
+    def _handle_step(self, body: dict[str, Any], *, observe: bool = False) -> dict[str, Any]:
         actions = body.get("actions", [])
         if not isinstance(actions, list):
             raise _AgentRequestError("'actions' must be a list")
@@ -436,7 +479,10 @@ class Gateway:
         def run_action() -> None:
             try:
                 # A failed step is an action result, not evidence of VM death.
-                result["info"] = self.adapter.step(actions)
+                if observe:
+                    result["info"], result["observation"] = self.adapter.step_observe(actions)
+                else:
+                    result["info"] = self.adapter.step(actions)
             except BaseException as exc:
                 message = (
                     f"Action failed: {type(exc).__name__}: {exc}. "
@@ -459,7 +505,10 @@ class Gateway:
             return {"ok": False, "error": message, "_actions": actions}
         if "error" in result:
             return {"ok": False, "error": result["error"], "_actions": actions}
-        return {"ok": True, "info": result["info"], "_actions": actions}
+        payload = {"ok": True, "info": result["info"], "_actions": actions}
+        if observe:
+            payload.update(self._record_observation(result["observation"], binary=True))
+        return payload
 
     def _handle_done(self) -> dict[str, Any]:
         if self._multi_episode:
@@ -518,29 +567,42 @@ class Gateway:
         gateway = self
 
         class Handler(BaseHTTPRequestHandler):
+            protocol_version = "HTTP/1.1" if gateway.fast_io else "HTTP/1.0"
+            disable_nagle_algorithm = gateway.fast_io
+            timeout = 120 if gateway.fast_io else None
+
             def log_message(self, *args):  # silence default stderr access log
                 pass
 
             def _reply(self, code: int, payload: dict[str, Any]) -> None:
                 data = json.dumps(payload).encode()
-                self.send_response(code)
-                self.send_header("Content-Type", "application/json")
-                self.send_header("Content-Length", str(len(data)))
-                self.end_headers()
-                self.wfile.write(data)
+                self._reply_bytes(code, data, "application/json")
 
             def _reply_text(self, code: int, text: str) -> None:
                 data = text.encode()
+                self._reply_bytes(code, data, "text/plain; charset=utf-8")
+
+            def _reply_bytes(self, code: int, data: bytes, content_type: str) -> None:
                 self.send_response(code)
-                self.send_header("Content-Type", "text/plain; charset=utf-8")
+                self.send_header("Content-Type", content_type)
                 self.send_header("Content-Length", str(len(data)))
+                if code >= 400 or (
+                    self.headers.get("Content-Length", "0") != "0"
+                    and not getattr(self, "_body_read", False)
+                ) or self.headers.get("Transfer-Encoding"):
+                    # Never interpret an unread body as the next request.
+                    self.close_connection = True
+                    self.send_header("Connection", "close")
                 self.end_headers()
                 self.wfile.write(data)
 
             def _read_body(self) -> dict[str, Any]:
                 try:
                     length = int(self.headers.get("Content-Length", 0))
+                    if length < 0 or length > 16 * 1024 * 1024:
+                        raise ValueError("invalid request body length")
                     body = json.loads(self.rfile.read(length) or b"{}")
+                    self._body_read = True
                 except (TypeError, ValueError, json.JSONDecodeError) as exc:
                     raise _AgentRequestError("request body must be valid JSON") from exc
                 if not isinstance(body, dict):
@@ -571,6 +633,7 @@ class Gateway:
                     self._reply(200, gateway.status())
                 elif method == "GET" and op == "runlog":
                     try:
+                        gateway.log.flush()
                         text = Path(gateway.runlog_path).read_text()
                     except OSError:
                         text = ""
@@ -594,17 +657,60 @@ class Gateway:
             # -- agent-facing run plane -------------------------------------
 
             def _route_run(self, op: str, method: str) -> None:
+                if not gateway.fast_io:
+                    self._route_run_inner(op, method)
+                    return
+                with gateway._responses:
+                    if gateway._finished.is_set():
+                        self._reply(409, {"error": "run is not active"})
+                        return
+                    gateway._active_responses += 1
+                arrived = time.monotonic()
+                try:
+                    self._route_run_inner(op, method)
+                finally:
+                    sent = time.monotonic()
+                    try:
+                        gateway.log.event(
+                            "gateway_response", op=op,
+                            t_mono_arrive=arrived, t_mono_sent=sent,
+                            dur=sent - arrived,
+                        )
+                    except Exception as exc:
+                        gateway._record_infrastructure_error(f"response recording failed: {exc}")
+                    finally:
+                        with gateway._responses:
+                            gateway._active_responses -= 1
+                            gateway._responses.notify_all()
+
+            def _route_run_inner(self, op: str, method: str) -> None:
                 if not gateway._running() or gateway._timed_out():
                     self._reply(409, {"error": "run is not active"})
                     return
                 t_arrive = time.monotonic()
+                binary = gateway.fast_io and (
+                    op == "step-observe" or self.headers.get("Accept") == CONTENT_TYPE
+                )
                 try:
                     if method == "GET" and op == "observe":
-                        payload = gateway._handle_observe()
+                        payload = gateway._handle_observe(binary=binary)
+                        if binary:
+                            payload["ok"] = True
                         kind, fields = "observe", {"frame": payload.pop("_frame")}
-                    elif method == "POST" and op == "step":
-                        payload = gateway._handle_step(self._read_body())
+                        fields.update(payload.pop("_image_info"))
+                        timings = payload.pop("_timings")
+                        if timings:
+                            fields["io_timings"] = timings
+                    elif method == "POST" and (op == "step" or (gateway.fast_io and op == "step-observe")):
+                        payload = gateway._handle_step(self._read_body(), observe=op == "step-observe")
                         kind, fields = "step", {"actions": payload.pop("_actions")}
+                        if "_frame" in payload:
+                            fields["frame"] = payload.pop("_frame")
+                            fields["combined_observation"] = True
+                            fields.update(payload.pop("_image_info"))
+                            timings = payload.pop("_timings")
+                            if timings:
+                                fields["io_timings"] = timings
                     elif method == "POST" and op == "done":
                         payload = gateway._handle_done()
                         kind, fields = "done", {}
@@ -626,7 +732,7 @@ class Gateway:
                     return
                 except Exception as exc:  # surfaced to the agent, and logged
                     gateway.log.event("env_error", op=op, error=repr(exc))
-                    if op in {"observe", "step"}:
+                    if op in {"observe", "step", "step-observe"}:
                         gateway._record_infrastructure_error(
                             f"environment {op} failed: {type(exc).__name__}: {exc}"
                         )
@@ -640,7 +746,19 @@ class Gateway:
                     dur=t_complete - t_arrive,
                     **fields,
                 )
-                self._reply(200, payload)
+                if fields.get("combined_observation"):
+                    # The capture is part of step's interval, not a second
+                    # timed operation. Keep observation counts/frame readers.
+                    gateway.log.event(
+                        "observe", frame=fields["frame"], combined=True,
+                        mime_type=fields["mime_type"], encoding=fields["encoding"],
+                        t_mono_arrive=t_complete, t_mono_complete=t_complete, dur=0.0,
+                    )
+                if binary and op in {"observe", "step-observe"}:
+                    image = payload.pop("_image", b"")
+                    self._reply_bytes(200, encode_observation(image, payload), CONTENT_TYPE)
+                else:
+                    self._reply(200, payload)
                 # This counter exists only for untimed status reporting. It is
                 # deliberately advanced after the response is sent so the TUI
                 # cannot add work to the measured environment operation.
@@ -649,6 +767,10 @@ class Gateway:
                         gateway._num_steps += 1
 
             def _route(self, method: str) -> None:
+                self._body_read = False
+                if self.headers.get("Transfer-Encoding") or len(self.headers.get_all("Content-Length", [])) > 1:
+                    self._reply(400, {"error": "use one Content-Length and no Transfer-Encoding"})
+                    return
                 parts = self.path.strip("/").split("/")
                 if len(parts) == 3 and parts[0] == "_ctl":
                     if parts[1] != gateway.control_token:

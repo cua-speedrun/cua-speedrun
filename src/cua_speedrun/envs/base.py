@@ -11,18 +11,35 @@ inside `prepare` and is never on the clock. The gateway owns all timing.
 from __future__ import annotations
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Callable
 
 
-@dataclass
+@dataclass(init=False)
 class Observation:
-    """One observation. `png` is the screenshot bytes, `meta` is extra info
+    """One observation. `image` contains encoded PNG or JPEG bytes; `meta` is info
     such as resolution or, where a track allows it, an accessibility tree."""
 
-    png: bytes
+    image: bytes
     meta: dict[str, Any]
+    # Evaluator-only diagnostic measurements; not part of the agent metadata.
+    timings: dict[str, float] = field(default_factory=dict)
+
+    def __init__(self, image: bytes | None = None, meta: dict | None = None,
+                 timings: dict | None = None, *, png: bytes | None = None):
+        # Existing third-party adapters construct Observation(png=...).
+        if image is not None and png is not None:
+            raise ValueError("provide image or png, not both")
+        self.image = image if image is not None else (png if png is not None else b"")
+        self.meta = meta if meta is not None else {}
+        self.timings = timings if timings is not None else {}
+
+    @property
+    def png(self) -> bytes:
+        """Legacy PNG access; new consumers use image to avoid transcoding."""
+        from cua_speedrun.images import as_png
+        return as_png(self.image)
 
 
 @dataclass
@@ -38,8 +55,21 @@ class EnvAdapter(ABC):
     """One live environment. Action dicts use gym-anything's schema:
     {"mouse": {...}}, {"keyboard": {...}}, {"action": "wait", "time": s}."""
 
+    fast_io = False
+
+    def step_observe(self, actions: list[dict[str, Any]]) -> tuple[dict[str, Any], Observation]:
+        """Act and observe once; override when step already captures a frame."""
+        return self.step(actions), self.observe()
+
+    def flush_recording(self) -> None:
+        """Drain backend-owned archival writes before artifact collection."""
+
     @abstractmethod
     def observe(self) -> Observation: ...
+
+    def observe_png(self) -> Observation:
+        """Legacy clients; PNG-native backends need no separate implementation."""
+        return self.observe()
 
     @abstractmethod
     def step(self, actions: list[dict[str, Any]]) -> dict[str, Any]:

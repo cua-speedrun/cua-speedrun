@@ -39,12 +39,12 @@ _CS_SRC = Path(__file__).resolve().parents[1]  # src/cua_speedrun
 CACHE_FILENAME = ".agent_snapshot_cache.json"
 
 # The only harness files that exist inside an agent sandbox (agent.py's
-# import surface is cua_speedrun.client and nothing else). The agent image
+# import surface is the client, binary transport, and async recording). The agent image
 # ships exactly these, and the cache key hashes exactly these, so edits to
 # the dashboard, worker, or executor never invalidate agent snapshots; only
 # a change to the agent-side contract does. Keep in sync with
 # modal_agent.build_agent_base_image, which imports this tuple.
-AGENT_RUNTIME_FILES = ("__init__.py", "client.py")
+AGENT_RUNTIME_FILES = ("__init__.py", "client.py", "fast_io.py", "fast_io_client.c", "images.py", "recording.py")
 
 
 def _tree_files(root: Path) -> list[Path]:
