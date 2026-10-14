@@ -119,6 +119,7 @@ def queue_evaluation(
     required_environment_names: Iterable[str] = (),
     runner: str | None = None,
     runner_template: str | None = None,
+    region: str | None = None,
 ) -> dict[str, Any]:
     """Validate and atomically queue one scored evaluation."""
     name = str(name).strip()
@@ -220,6 +221,7 @@ def queue_evaluation(
                 allocate_gpu=allocate_gpu,
                 gpu=gpu,
                 eval_algorithm=eval_algorithm,
+                region=region,
             )
             scale = ExecutionScale.for_plan(
                 plan,

@@ -21,6 +21,11 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Mapping
 
+from cua_speedrun.envs.gym_anything import fast_io_enabled
+from cua_speedrun.envs.fast_capture import capture_backend, profiling_enabled
+from cua_speedrun.envs.prepared_capture import prepared_encoding_enabled
+from cua_speedrun.images import fast_image_format
+
 # gym-anything's proven sandbox package set.
 from gym_anything.runtime.runners.modal_runner import (  # type: ignore
     _SANDBOX_APT,
@@ -191,7 +196,8 @@ def _environment_resources(
     return max(guest_cpu + 1, 5), max(guest_mem_gb + 3, 12) * 1024
 
 
-def _base_image(env_local_dir: Path, runtime: dict, *, native_runner: bool = False):
+def _base_image(env_local_dir: Path, runtime: dict, *, native_runner: bool = False,
+                fast_io: bool = False):
     import modal
 
     from cua_speedrun.remote import osworld_modal_base as _osworld_base
@@ -206,9 +212,19 @@ def _base_image(env_local_dir: Path, runtime: dict, *, native_runner: bool = Fal
             *_SANDBOX_APT,
             *_osworld_base.ENV_PLANE_APT,
             *(runtime.get("apt_packages") or []),
+            *(["dbus"] if fast_io else []),
         )
-        .pip_install(*_SANDBOX_PIP, "litellm")
+        .pip_install(*_SANDBOX_PIP, "litellm", *(["dbus-next==0.2.3"] if fast_io else []))
     )
+    if fast_io and not native_runner and _detect_env_kind(env_local_dir) != "android":
+        # Validate native QEMU's D-Bus support before provisioning a VM.
+        image = image.run_commands(
+            "python -c \"import subprocess, shutil, dbus_next; "
+            "assert shutil.which('dbus-daemon'); "
+            "p=subprocess.run(['qemu-system-x86_64','-display','help'], "
+            "capture_output=True,text=True,check=True); "
+            "assert 'dbus' in {s.strip() for s in (p.stdout+p.stderr).splitlines()}, p.stdout+p.stderr\""
+        )
     if native_runner:
         image = image.pip_install("modal==1.5.5", "vncdotool", "google-genai", "google-generativeai")
     if runtime.get("pyproject"):
@@ -238,8 +254,10 @@ def prepare_native_controller(runtime: dict) -> None:
         _base_image(Path.cwd(), runtime, native_runner=True).build(app)
 
 
-def _build_image(env_local_dir: Path, extra_dirs: dict[str, Path], *, native_runner: bool = False):
-    image = _base_image(env_local_dir, _host_runtime(env_local_dir), native_runner=native_runner)
+def _build_image(env_local_dir: Path, extra_dirs: dict[str, Path], *, native_runner: bool = False,
+                 fast_io: bool = False):
+    image = _base_image(env_local_dir, _host_runtime(env_local_dir),
+                        native_runner=native_runner, fast_io=fast_io)
     # Modal requires build steps before local-file mounts. The packages and
     # environment definition are added last and remain evaluator-only.
     image = (
@@ -286,6 +304,9 @@ def create_env_sandbox(
     forwarded verbatim to the in-sandbox Backend."""
     import modal
 
+    # Use only this evaluation's saved variables, not the launcher's ambient
+    # environment: enabling one run must not change any other run or resume.
+    fast_io = fast_io_enabled(runtime_env or {})
     run_token = secrets.token_urlsafe(16)
     control_token = secrets.token_urlsafe(16)
 
@@ -298,7 +319,7 @@ def create_env_sandbox(
     runtime = _host_runtime(env_local_dir)
     app = modal.App.lookup("cua-speedrun-env", create_if_missing=True)
     volume = modal.Volume.from_name("gym-anything-qemu-cache", create_if_missing=True)
-    image = _build_image(env_local_dir, extra, native_runner=native_runner)
+    image = _build_image(env_local_dir, extra, native_runner=native_runner, fast_io=fast_io)
 
     # The runner and pre-boot setup depend on the environment kind. Android
     # envs restore the AVD stack from the volume and run avd_native; Linux
@@ -328,6 +349,7 @@ def create_env_sandbox(
         # The in-sandbox Backend sets GYM_ANYTHING_RUNNER itself; the
         # launcher only names which registered backend the plane constructs.
         "GYM_ANYTHING_QEMU_CACHE": "/cache/qemu",
+        "GYM_ANYTHING_FAST_IO": str(fast_io).lower(),
         # OSWorld-image benchmarks reference ${OSWORLD_QEMU_BASE_IMAGE} in
         # env.json. The prepared qcow2 (plus its .provenance.json sidecar)
         # lives on the shared qemu-cache volume, built once by
@@ -343,6 +365,11 @@ def create_env_sandbox(
         "CS_RUN_TOKEN": run_token,
         "CS_CONTROL_TOKEN": control_token,
     }
+    if fast_io:
+        env["GYM_ANYTHING_QEMU_FAST_IO_BACKEND"] = capture_backend(runtime_env or {})
+        env["CS_FAST_IO_PROFILE"] = str(profiling_enabled(runtime_env or {})).lower()
+        env["GYM_ANYTHING_FAST_IO_IMAGE_FORMAT"] = fast_image_format(runtime_env or {})
+        env["GYM_ANYTHING_FAST_IO_PREPARE_IMAGES"] = str(prepared_encoding_enabled(runtime_env or {})).lower()
     if gen_remote:
         env["CS_GENERATOR"] = gen_remote
     if task_label:
@@ -493,6 +520,17 @@ def _exec_text(es: EnvSandbox, cmd: str, timeout: int) -> tuple[int, str]:
 _ARTIFACT_CHUNK_BYTES = 8 * 1024 * 1024
 
 
+def _artifact_archive_command(remote_tar: str, directory: str = "/tmp/cs_run") -> str:
+    """Include both old PNG and image-aware JPEG observation artifacts."""
+    import shlex
+    target = shlex.quote(remote_tar)
+    return (
+        f"cd {shlex.quote(directory)} 2>/dev/null && rm -f {target} && "
+        f"tar czf {target} env_plane.log frame_*.png frame_*.jpg episode "
+        f"2>/dev/null; test -s {target}"
+    )
+
+
 def pull_env_artifacts(
     es: EnvSandbox, task_dir: Path
 ) -> tuple[list[str], str | None]:
@@ -511,9 +549,7 @@ def pull_env_artifacts(
     try:
         rc, _ = _exec_text(
             es,
-            f"cd /tmp/cs_run 2>/dev/null && rm -f {remote_tar} && "
-            f"tar czf {remote_tar} env_plane.log frame_*.png episode "
-            f"2>/dev/null; test -s {remote_tar}",
+            _artifact_archive_command(remote_tar),
             timeout=300,
         )
         if rc != 0:

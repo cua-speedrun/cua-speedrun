@@ -108,11 +108,13 @@ class LocalEvaluations:
         eval_algorithm: str | None = None,
         runner: str | None = None,
         runner_template: str | None = None,
+        region: str | None = None,
     ) -> dict[str, Any]:
         self._sync_modal_credentials_from_process(compute, environment)
         return queue_evaluation(
             runner=runner,
             runner_template=runner_template,
+            region=region,
             session_factory=self.session_factory,
             store=self.store,
             user_id=self.user_id,

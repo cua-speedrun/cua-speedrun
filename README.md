@@ -102,6 +102,9 @@ cua-speedrun export RUN_ID
 Use `cua-speedrun catalog` to list available agents and benchmarks, or
 `cua-speedrun help benchmark` for more options.
 
+For combined action and screenshot delivery, background recording, and
+same-region Modal placement, see [FastIO](docs/fast-io.md).
+
 ## Benchmarks
 
 | Benchmark | Tasks |

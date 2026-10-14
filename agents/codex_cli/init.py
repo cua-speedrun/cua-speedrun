@@ -144,7 +144,25 @@ def ensure_cli(node: Path) -> Path:
     return cli
 
 
+def ensure_curl() -> None:
+    """Resolve the native shell client during untimed initialization."""
+    import os
+    import shutil
+    import subprocess
+    from cua_speedrun import fast_io
+    fast_io.build_shell_client()
+    if shutil.which("curl") is None:
+        if os.geteuid() != 0 or shutil.which("apt-get") is None:
+            raise RuntimeError("Codex computer-use commands require curl; install it before evaluation")
+        subprocess.check_call(["apt-get", "update"])
+        subprocess.check_call(["apt-get", "install", "-y", "--no-install-recommends", "curl"])
+    # --fail-with-body is needed to preserve errors while returning failure.
+    subprocess.run(["curl", "-q", "--fail-with-body", "--version"],
+                   check=True, capture_output=True, text=True, timeout=10)
+
+
 def main() -> None:
+    ensure_curl()
     node = ensure_node()
     ensure_pillow()
     cli = ensure_cli(node)

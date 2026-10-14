@@ -392,7 +392,7 @@ def register_web(app: FastAPI, session_factory, session_user_id) -> None:
                         artifacts["logs"].append({
                             "task_id": task_id, "seed": seed, "name": name,
                             "url": f"/runs/{run.id}/artifact/{task_id}/{seed}/{name}"})
-                if any(td.glob("frame_*.png")):
+                if any(td.glob("frame_*.png")) or any(td.glob("frame_*.jpg")):
                     artifacts["has_trajectory"] = True
                 meta = td / "meta.json"
                 if meta.is_file():
@@ -678,7 +678,7 @@ def register_web(app: FastAPI, session_factory, session_user_id) -> None:
                 raise HTTPException(403, "not your run")
             return run.run_dir
 
-    _ARTIFACT_OK = (".png", ".log", ".jsonl", ".txt", ".stdout", ".stderr", ".json")
+    _ARTIFACT_OK = (".png", ".jpg", ".jpeg", ".log", ".jsonl", ".txt", ".stdout", ".stderr", ".json")
 
     @app.get("/runs/{run_id}/execution-log/{name:path}",
              include_in_schema=False)
@@ -714,7 +714,9 @@ def register_web(app: FastAPI, session_factory, session_user_id) -> None:
             raise HTTPException(404)
         if target.suffix.lower() not in _ARTIFACT_OK:
             raise HTTPException(403, "not a viewable artifact")
-        media = "image/png" if target.suffix == ".png" else "text/plain"
+        media = {".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg"}.get(
+            target.suffix.lower(), "text/plain"
+        )
         return FileResponse(target, media_type=media)
 
     @app.get("/runs/{run_id}/tasks/{task_id}/{seed}", include_in_schema=False)

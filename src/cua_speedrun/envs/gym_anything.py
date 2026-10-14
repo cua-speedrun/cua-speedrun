@@ -20,6 +20,8 @@ The task's env block looks like:
       cache_level: post_task
 
 Requires gym-anything installed (pip install -e path/to/gym-anything-primerl).
+Set GYM_ANYTHING_FAST_IO=true in the environment worker to opt into the
+runner's fast I/O. It is disabled by default; task configuration cannot enable it.
 """
 
 from __future__ import annotations
@@ -28,16 +30,62 @@ import base64
 import hashlib
 import importlib
 import importlib.util
+import io
 import json
 import os
 import shlex
 import sys
 import time
 from pathlib import Path, PureWindowsPath
-from typing import Any
+from typing import Any, Mapping
 
 from cua_speedrun.envs.base import Backend, EnvAdapter, Observation, PreparedEnv, Verdict
 from cua_speedrun.envs.keyboard import keyboard_script, patch_runner_keyboard
+from cua_speedrun.envs.fast_capture import (
+    CaptureTimer, capture_backend, enable_fast_capture, profiling_enabled,
+)
+from cua_speedrun.envs.prepared_capture import PreparedDbusCapture, prepared_encoding_enabled
+from cua_speedrun.images import encode_image, fast_image_format, image_mime_type
+
+
+def fast_io_enabled(environment: Mapping[str, str]) -> bool:
+    """Parse the explicit opt-in; never silently enable it for a typo."""
+    value = environment.get("GYM_ANYTHING_FAST_IO", "false").strip().lower()
+    if value not in {"true", "false", "1", "0"}:
+        raise ValueError("GYM_ANYTHING_FAST_IO must be true, false, 1, or 0")
+    return value in {"true", "1"}
+
+
+def action_settle_seconds(env_spec: Mapping[str, Any], *, fast_io: bool) -> float:
+    """Fast I/O adds no fixed pause; agent-requested wait actions are separate."""
+    return 0.0 if fast_io else float(env_spec.get("action_settle_ms", 300)) / 1000.0
+
+
+def observation_from_gym(obs: dict[str, Any], *, fast_io: bool = False,
+                         image_format: str | None = None, image_encoder=encode_image) -> Observation:
+    """Encode the in-memory fast frame directly; leave normal PNG unchanged."""
+    screen = obs.get("screen", {})
+    image_bytes = b""
+    meta = {k: v for k, v in screen.items() if k not in ("png_b64", "path", "image")}
+    if screen.get("png_b64"):
+        image_bytes = base64.b64decode(screen["png_b64"])
+    elif screen.get("path"):
+        image_bytes = Path(screen["path"]).read_bytes()
+    elif screen.get("image") is not None:
+        image = screen["image"]
+        if fast_io:
+            selected = image_format or fast_image_format(os.environ)
+            image_bytes, encoding = image_encoder(image, selected)
+            meta.update(format=selected, encoding=encoding,
+                        resolution=list(image.size), mode="RGB" if selected == "jpeg" else image.mode)
+        else:
+            buffer = io.BytesIO()
+            image.save(buffer, format="PNG", compress_level=6)
+            image_bytes = buffer.getvalue()
+            meta["format"] = "png"
+    if "ui_tree" in obs:
+        meta["ui_tree"] = obs["ui_tree"]
+    return Observation(image=image_bytes, meta=meta)
 
 
 # Files used by host-side grading or imported benchmark rubrics must not
@@ -181,25 +229,48 @@ def scrub_guest_privileged_material(env: Any) -> list[str]:
 
 
 class GymAnythingAdapter(EnvAdapter):
-    def __init__(self, env: Any, settle_sec: float):
+    def __init__(self, env: Any, settle_sec: float, *, fast_io: bool | None = None):
         self._env = env
+        self.fast_io = bool(getattr(env, "fast_io", False)) if fast_io is None else fast_io
+        self._trajectory_writer = None
+        if self.fast_io and getattr(env, "_traj_log", None) is not None:
+            from cua_speedrun.recording import AsyncJSONL
+            self._trajectory_writer = AsyncJSONL(env._traj_log)
+            env._traj_log = self._trajectory_writer
+            # Gym can finalize from a terminal action as well as from our
+            # checker. A verifier may read traj.jsonl: drain before either.
+            complete_episode = env._complete_episode
+
+            def complete_with_recording() -> dict:
+                self.flush_recording()
+                return complete_episode()
+
+            env._complete_episode = complete_with_recording
         self._settle_sec = settle_sec
         self._env_step_accepts_settle_sec = True
         self._verifier_report: dict[str, Any] | None = None
+        self._prepared_capture = None
+        display = getattr(env._runner, "_dbus_display", None)
+        if self.fast_io and display is not None and prepared_encoding_enabled(os.environ):
+            self._prepared_capture = PreparedDbusCapture(display, fast_image_format(os.environ))
+        self._capture_timer = None
+        if self.fast_io and profiling_enabled(os.environ):
+            self._capture_timer = CaptureTimer(env._runner.capture_screenshot_image)
+            env._runner.capture_screenshot_image = self._capture_timer
         self._patch_keyboard_hold_actions()
 
     def observe(self) -> Observation:
-        obs = self._env.capture_observation()
-        screen = obs.get("screen", {})
-        png = b""
-        if screen.get("png_b64"):
-            png = base64.b64decode(screen["png_b64"])
-        elif screen.get("path"):
-            png = Path(screen["path"]).read_bytes()
-        meta = {k: v for k, v in screen.items() if k not in ("png_b64", "path")}
-        if "ui_tree" in obs:
-            meta["ui_tree"] = obs["ui_tree"]
-        return Observation(png=png, meta=meta)
+        return self._observation(self._env.capture_observation())
+
+    def _observation(self, obs, image_format=None):
+        encoder = self._prepared_capture.encode if self._prepared_capture else encode_image
+        return observation_from_gym(obs, fast_io=self.fast_io, image_format=image_format,
+                                    image_encoder=encoder)
+
+    def observe_png(self) -> Observation:
+        # Explicit compatibility path: encode PNG from the original capture,
+        # never JPEG followed by PNG for existing Computer.observe clients.
+        return self._observation(self._env.capture_observation(), image_format="png")
 
     def step(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
         # wait_between_actions=0 and an explicit settle keep environment step
@@ -207,6 +278,37 @@ class GymAnythingAdapter(EnvAdapter):
         # not gym-anything's default 2-second-per-step tax. Agents insert
         # their own wait actions when the UI needs longer to settle.
         _obs, _reward, done, info = self._step_env(actions)
+        return self._step_info(done, info)
+
+    def step_observe(self, actions: list[dict[str, Any]]) -> tuple[dict[str, Any], Observation]:
+        timer = self._capture_timer
+        metrics = timer.begin() if timer is not None else {}
+        started = time.perf_counter()
+        try:
+            obs, _reward, done, info = self._step_env(actions)
+            stepped = time.perf_counter()
+            observation = self._observation(obs)
+            encoded = time.perf_counter()
+        finally:
+            if timer is not None:
+                timer.end()
+        if timer is not None:
+            observation.timings = {
+                **metrics, "gym_step_sec": stepped - started,
+                "step_excluding_capture_sec": stepped - started - metrics["capture_sec"],
+                "image_prepare_sec": encoded - stepped,
+            }
+            image = obs.get("screen", {}).get("image")
+            frame = getattr(image, "_cua_prepared_frame", None)
+            if frame is not None:
+                observation.timings.update(
+                    encoding_ready_at_capture=bool(image._cua_encoding_ready_at_capture),
+                    framebuffer_version=frame.version,
+                    frame_encode_sec=frame.encode_sec,
+                )
+        return self._step_info(done, info), observation
+
+    def _step_info(self, done: bool, info: dict) -> dict[str, Any]:
         report = info.get("verifier") if done and isinstance(info, dict) else None
         if isinstance(report, dict):
             # A redundant step after gym-anything finalizes returns no report.
@@ -333,6 +435,7 @@ class GymAnythingAdapter(EnvAdapter):
         return out.decode(errors="replace") if isinstance(out, bytes) else str(out)
 
     def finalize(self) -> Verdict:
+        self.flush_recording()
         if self._verifier_report is None:
             # The agent never marked done through gym-anything's own
             # mechanism; finalize the episode now to run the verifier.
@@ -348,12 +451,24 @@ class GymAnythingAdapter(EnvAdapter):
             detail=str({k: v for k, v in report.items() if k != "passed"}),
         )
 
+    def flush_recording(self) -> None:
+        if self._trajectory_writer is not None:
+            self._trajectory_writer.flush()
+
     def close(self) -> None:
         # CUA Speedrun owns finalization through ``finalize`` above.  Gym
         # Anything's close fallback would otherwise run the verifier again
         # when that call timed out, delaying the fresh-instance retry.
         self._env._finalized = True
-        self._env.close()
+        try:
+            try:
+                if self._prepared_capture is not None:
+                    self._prepared_capture.close()
+            finally:
+                self._env.close()
+        finally:
+            if self._trajectory_writer is not None:
+                self._trajectory_writer.close()
 
 
 class GymAnythingBackend(Backend):
@@ -797,6 +912,10 @@ class GymAnythingBackend(Backend):
             x11_display = getattr(runner, "_cs_qemu_x11_display", None)
             if x11_display:
                 rewritten = rewritten.replace("DISPLAY=:1", f"DISPLAY={x11_display}")
+                if getattr(runner, "_fast_io", False):
+                    rewritten = rewritten.replace(
+                        "--x11-display :1", f"--x11-display {x11_display}"
+                    )
             stripped = rewritten.lstrip()
             leading = rewritten[: len(rewritten) - len(stripped)]
             if stripped.startswith("sudo "):
@@ -998,11 +1117,24 @@ class GymAnythingBackend(Backend):
         config_overrides = env_spec.get("config_overrides")
         if config_overrides is not None and not isinstance(config_overrides, dict):
             raise ValueError("gym-anything config_overrides must be an object")
+        fast_io = fast_io_enabled(os.environ)
+        if fast_io:
+            os.environ["GYM_ANYTHING_QEMU_FAST_IO_BACKEND"] = capture_backend(os.environ)
+            fast_image_format(os.environ)  # Fail before boot for an invalid codec option.
         env = from_config(
             env_dir,
             task_id=env_spec["task_id"],
             overrides=config_overrides,
+            # Enable after construction so the native runner can use a native
+            # prerequisite check instead of attempting an Apptainer build.
+            fast_io=False,
         )
+        if fast_io:
+            try:
+                enable_fast_capture(env)
+            except Exception:
+                env.close()
+                raise
         actual_runner = env.runner_name
         self._record_runner(actual_runner)
         if self.require_runner and actual_runner != self.require_runner:
@@ -1110,10 +1242,11 @@ class GymAnythingBackend(Backend):
             description = nl
         else:
             description = getattr(env.task_spec, "description", "")
-        # Per-task settle after each action batch, in seconds. Defaults low so
-        # the environment step time reflects real UI latency, not a fixed tax;
-        # a task that needs longer to settle can raise it in its env block.
-        settle_sec = float(env_spec.get("action_settle_ms", 300)) / 1000.0
+        # Fast I/O has no fixed post-batch delay. Normal I/O retains the task's
+        # settling override (or 300 ms default). Neither changes wait actions.
+        settle_sec = action_settle_seconds(
+            env_spec, fast_io=bool(getattr(env, "fast_io", False))
+        )
         try:
             # Patch the runner, not a benchmark adapter: extension adapters
             # (including OSWorld2) must use the same keyboard implementation.
@@ -1134,15 +1267,15 @@ class GymAnythingBackend(Backend):
         adapter = (
             extension.adapter
             if extension is not None
-            else GymAnythingAdapter(env, settle_sec=settle_sec)
+            else GymAnythingAdapter(
+                env, settle_sec=settle_sec,
+                fast_io=bool(getattr(env, "fast_io", False)),
+            )
         )
+        adapter.fast_io = bool(getattr(env, "fast_io", False))
         try:
             initial_observation = adapter.observe()
-            if not initial_observation.png.startswith(b"\x89PNG\r\n\x1a\n"):
-                raise RuntimeError(
-                    "gym-anything environment did not produce a valid initial "
-                    "PNG screenshot after reset"
-                )
+            image_mime_type(initial_observation.image)  # Reject invalid image headers before arming.
         except Exception:
             try:
                 adapter.close()
@@ -1163,6 +1296,19 @@ class GymAnythingBackend(Backend):
                 # itself, so the run log records what really executed rather
                 # than what the backend intended.
                 "runner": env.runner_name,
+                "fast_io": bool(getattr(env, "fast_io", False)),
+                "fast_capture_backend": (
+                    env._runner._fast_io_backend()
+                    if fast_io and hasattr(env._runner, "_fast_io_backend") else None
+                ),
+                "dbus_listener_registered": bool(
+                    getattr(env._runner, "_dbus_display", None) is not None
+                    and env._runner._dbus_display._registered.is_set()
+                ),
+                "fast_io_profile": fast_io and profiling_enabled(os.environ),
+                "prepared_image_encoding": bool(getattr(adapter, "_prepared_capture", None)),
+                "observation_mime_type": image_mime_type(initial_observation.image),
+                "observation_encoding": initial_observation.meta.get("encoding"),
                 "privileged_mounts_scrubbed": scrubbed_mounts,
                 "qemu_base_image": getattr(
                     getattr(env, "_runner", None), "_cs_effective_qemu_base_image", None

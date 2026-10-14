@@ -183,13 +183,17 @@ def _wait_init_sentinel(
     on_start fires at the supervisor's start sentinel, i.e. the moment the
     container is actually running; the time before it is image build plus
     scheduling plus boot."""
-    result: dict[str, int] = {}
+    result: dict[str, Any] = {}
 
     def _reader() -> None:
         for line in sb.stdout:
             if _START_SENTINEL in line:
                 if on_start:
-                    on_start()
+                    try:
+                        on_start()
+                    except BaseException as exc:
+                        result["error"] = exc
+                        return
                 continue
             m = _SENTINEL.search(line)
             if m:
@@ -200,6 +204,8 @@ def _wait_init_sentinel(
     reader = threading.Thread(target=_reader, daemon=True)
     reader.start()
     reader.join(timeout_sec)
+    if "error" in result:
+        raise result["error"]
     if "rc" not in result:
         if sb.poll() is not None:
             raise RuntimeError(
@@ -238,6 +244,7 @@ def _read_remote_file(sb: Any, path: str) -> tuple[str, bool]:
 
 
 def init_and_snapshot(submission_dir: Path, *, gpu: str | None = None,
+                      region: str | None = None,
                       extra_pip: list[str] | None = None,
                       agent_runtime: Mapping[str, Any] | None = None,
                       runtime_env: dict[str, str] | None = None,
@@ -270,18 +277,23 @@ def init_and_snapshot(submission_dir: Path, *, gpu: str | None = None,
         "python3", "-u", "-c", _SUPERVISOR,
         app=app, image=image, gpu=gpu, cpu=cpu, memory=memory,
         timeout=init_timeout_sec,
+        region=region,
         env=runtime_env or {},
     )
     ev("init_sandbox_created", sandbox_id=getattr(sb, "object_id", None),
-       create_sec=round(time.monotonic() - t0, 3), gpu=gpu)
+       create_sec=round(time.monotonic() - t0, 3), gpu=gpu, region=region)
     t_created = time.monotonic()
     started: dict[str, float] = {}
 
     def _on_start() -> None:
         # First output from the container: queue + boot are over.
         started["t"] = time.monotonic()
+        rc, actual_region = _sh(sb, "printenv MODAL_REGION", timeout=30)
+        if rc != 0 or not actual_region.strip():
+            raise RuntimeError("init sandbox did not report its actual region")
         ev("init_sandbox_started",
-           queue_boot_sec=round(started["t"] - t_created, 3))
+           queue_boot_sec=round(started["t"] - t_created, 3),
+           actual_region=actual_region.strip())
 
     emit = on_line or (lambda line: print(f"[init] {line.rstrip()}", flush=True))
     try:
@@ -325,6 +337,7 @@ def agent_image_from_cache(
     image_id: str,
     gpu: str | None,
     runtime_env: dict[str, str] | None = None,
+    *, region: str | None = None,
 ) -> AgentImage | None:
     """Rebuild an AgentImage from a cached snapshot id, validated by creating
     and immediately terminating a probe sandbox from it. Returns None when
@@ -342,7 +355,7 @@ def agent_image_from_cache(
     app = modal.App.lookup("cua-speedrun-agent", create_if_missing=True)
     image = modal.Image.from_id(image_id)
     try:
-        probe = modal.Sandbox.create("true", app=app, image=image, timeout=60)
+        probe = modal.Sandbox.create("true", app=app, image=image, timeout=60, region=region)
     except (modal.exception.NotFoundError, modal.exception.PermissionDeniedError):
         return None
     try:

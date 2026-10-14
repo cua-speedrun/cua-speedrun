@@ -40,7 +40,7 @@ import time
 from concurrent.futures import Future, ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Collection, Mapping, Sequence
+from typing import Any, Callable, Collection, Mapping, Sequence
 from urllib.parse import urlparse
 
 import cua_speedrun
@@ -51,6 +51,7 @@ from cua_speedrun.evaluation_runtime import (
     ComputeInfrastructureError,
     InstanceInfrastructureError,
     MODAL_RUNTIME_CAPABILITIES,
+    INSTANCE_INFRASTRUCTURE_MAX_ATTEMPTS,
 )
 from cua_speedrun.events import ConsoleSink, EventBus, JsonlSink, Sink
 from cua_speedrun.gateway import VERIFIER_TIMEOUT_SEC, monitor_gateway_steps
@@ -428,7 +429,7 @@ def run_benchmark_remote(
             cached = snapshot_cache.lookup(out_root, cache_key)
             if cached is not None:
                 agent_image = agent_image_from_cache(
-                    cached["image_id"], gpu, runtime_environment
+                    cached["image_id"], gpu, runtime_environment, region=region
                 )
                 if agent_image is None:
                     events.emit("init_cache_invalid", image_id=cached["image_id"])
@@ -464,7 +465,7 @@ def run_benchmark_remote(
                     init_phases["snapshot_image_id"] = payload.get("image_id")
 
             agent_image = init_and_snapshot(
-                submission.submission_dir, gpu=gpu, extra_pip=extra_pip,
+                submission.submission_dir, gpu=gpu, region=region, extra_pip=extra_pip,
                 agent_runtime=agent_runtime,
                 runtime_env=runtime_environment,
                 log_path=run_dir / "init.log",
@@ -594,6 +595,7 @@ def _run_one_remote(
     api_domains: Sequence[str] = (),
     environment_backend: str = "gym-anything-modal",
     environment_runtime: Mapping[str, str] | None = None,
+    on_region: Callable[[str | None], None] | None = None,
 ) -> dict[str, Any]:
     task_key = f"{task.task_id}/seed_{seed}"
     task_dir = run_dir / "tasks" / task.task_id / f"seed_{seed}"
@@ -701,6 +703,8 @@ def _run_one_remote(
             region_known = threading.Event()
 
             def _on_agent_started(actual_region: str | None) -> None:
+                if on_region:
+                    on_region(actual_region)
                 warm["agent_region_early"] = actual_region
                 region_known.set()
 
@@ -729,15 +733,10 @@ def _run_one_remote(
             # GPU acquired: bring the env to its region while the submitted
             # init.py warms; env boot and agent warmup overlap.
             _set_phase("prepare (env boot + agent warmup)")
-            env_region = region or warm.get("agent_region_early")
-            try:
-                es = _create_env(env_region)
-            except Exception as exc:
-                if region is not None:
-                    raise  # an explicit --region stays strict
-                events.emit("env_region_fallback", task_key=task_key,
-                            region=env_region, error=repr(exc))
-                es = _create_env(None)
+            env_region = warm.get("agent_region_early")
+            if not env_region:
+                raise RuntimeError("agent region is unknown; refusing unpinned environment")
+            es = _create_env(env_region)
             env_log_thread = tail_sandbox_file(
                 es.sandbox, "/tmp/cs_run/env_plane.log",
                 lambda line: events.emit("env_line", task_key=task_key, line=line),
@@ -776,24 +775,15 @@ def _run_one_remote(
 
             def _warm_agent() -> None:
                 try:
-                    env_region = region or read_region(es)
+                    env_region = read_region(es)
+                    if not env_region:
+                        raise RuntimeError("environment region is unknown; refusing unpinned agent")
+                    if on_region:
+                        on_region(env_region)
                     warm["env_region"] = env_region
                     events.emit("warmup_started", task_key=task_key,
                                 region=env_region)
-                    try:
-                        warm["result"] = _spawn(env_region, gateway_host)
-                    except Exception as exc:
-                        # Auto co-location is best effort: the env sandbox
-                        # can land in a region with no capable worker. Fall
-                        # back to unpinned placement and record both
-                        # regions. An explicit --region stays strict.
-                        if region is None and env_region and \
-                                "worker type supports" in str(exc):
-                            events.emit("warmup_fallback", task_key=task_key,
-                                        region=env_region)
-                            warm["result"] = _spawn(None, gateway_host)
-                        else:
-                            raise
+                    warm["result"] = _spawn(env_region, gateway_host)
                 except BaseException as exc:  # re-raised on the task thread
                     warm["error"] = exc
 
@@ -814,6 +804,9 @@ def _run_one_remote(
         meta["agent_region"] = agent_sb.region
         meta["warmup_sec"] = agent_sb.warmup_sec
         meta["agent_sandbox_id"] = getattr(agent_sb.sandbox, "object_id", None)
+        require_same_region(meta["env_region"], agent_sb.region)
+        events.emit("placement_verified", task_key=task_key,
+                    env_region=meta["env_region"], agent_region=agent_sb.region)
         events.emit("warmup_done", task_key=task_key,
                     warmup_sec=agent_sb.warmup_sec, agent_region=agent_sb.region)
         phases["prepare_total_sec"] = round(time.monotonic() - t_task0, 3)
@@ -999,6 +992,15 @@ class _RemoteComputeReplica:
     recovery_lock: Any = field(default_factory=threading.Lock, repr=False)
 
 
+def require_same_region(expected: str | None, actual: str | None) -> str:
+    """Fail before timing when placement is unknown or crosses regions."""
+    if not expected or not actual or actual != expected:
+        raise InstanceInfrastructureError(
+            f"same-region placement required: expected={expected!r}, actual={actual!r}"
+        )
+    return actual
+
+
 class _RemoteEvaluationRuntime:
     """Modal implementation of the provider-neutral algorithm operations."""
 
@@ -1023,6 +1025,9 @@ class _RemoteEvaluationRuntime:
         self.run_dir = run_dir
         self.run_id = run_id
         self.region = region
+        self.resolved_region: str | None = None
+        self._placement_condition = threading.Condition()
+        self._placement_resolving = False
         self.events = events
         self.scale = execution_scale
         self.network_policy = network_policy
@@ -1038,19 +1043,35 @@ class _RemoteEvaluationRuntime:
 
     def run_isolated(self, job):
         task, seed = job
-        return _run_one_remote(
-            self.agent_image,
-            task,
-            seed,
-            self.run_dir,
-            self.run_id,
-            self.region,
-            self.events,
-            self.network_policy,
-            self.api_domains,
-            environment_backend=self.environment_backend,
-            environment_runtime=self.environment_runtime,
-        )
+        with self._placement_condition:
+            while self.resolved_region is None and self._placement_resolving:
+                self._placement_condition.wait()
+            owner = self.resolved_region is None
+            if owner:
+                self._placement_resolving = True
+            region = self.resolved_region or self.region
+        try:
+            return _run_one_remote(
+                self.agent_image, task, seed, self.run_dir, self.run_id,
+                region, self.events, self.network_policy, self.api_domains,
+                environment_backend=self.environment_backend,
+                environment_runtime=self.environment_runtime,
+                on_region=self._resolve_region,
+            )
+        finally:
+            if owner:
+                with self._placement_condition:
+                    self._placement_resolving = False
+                    self._placement_condition.notify_all()
+
+    def _resolve_region(self, actual: str | None) -> None:
+        with self._placement_condition:
+            region = require_same_region(self.resolved_region or actual, actual)
+            if self.resolved_region is None:
+                self.resolved_region = region
+                self.events.emit("run_region_resolved", requested_region=self.region,
+                                 resolved_region=region)
+            self._placement_condition.notify_all()
 
     def _start_replica(self, index, jobs):
         replica = _RemoteComputeReplica(
@@ -1086,14 +1107,14 @@ class _RemoteEvaluationRuntime:
         def warm() -> None:
             try:
                 replica.events.emit(
-                    "warmup_started", region=self.region or "unpinned"
+                    "warmup_started", region=self.resolved_region or self.region or "unpinned"
                 )
                 replica.shared["sb"] = spawn_agent_sandbox(
                     self.agent_image,
                     None,
                     network_policy=self.network_policy,
                     api_domains=self.api_domains,
-                    region=self.region,
+                    region=self.resolved_region or self.region,
                     task_timeout_sec=replica.total_timeout,
                     warmup_timeout_sec=(
                         GPU_WARMUP_TIMEOUT_SEC
@@ -1107,6 +1128,11 @@ class _RemoteEvaluationRuntime:
                         kind, **payload
                     ),
                 )
+                replica.events.emit(
+                    "compute_region_observed", agent_region=replica.shared["sb"].region,
+                    resolved_region=self.resolved_region,
+                    sandbox_id=getattr(replica.shared["sb"].sandbox, "object_id", None),
+                )
             except BaseException as exc:
                 replica.shared["error"] = exc
         replica.warm_thread = threading.Thread(target=warm, daemon=True)
@@ -1117,11 +1143,35 @@ class _RemoteEvaluationRuntime:
         try:
             for index, jobs in enumerate(shards, start=1):
                 replicas.append(self._start_replica(index, jobs))
+                if self.resolved_region is None:
+                    # Resolve once, then pin every replica, environment and
+                    # replacement. Never schedule their regions independently.
+                    self._ready_for_region_selection(replicas[-1])
+                    region = replicas[-1].shared["sb"].region
+                    self._resolve_region(region)
             return replicas
         except BaseException:
             for replica in replicas:
                 self.close_compute_replica(replica)
             raise
+
+    def _ready_for_region_selection(self, replica):
+        # Selecting the run region must not remove the usual bounded
+        # infrastructure retries from the first compute replica.
+        for attempt in range(1, INSTANCE_INFRASTRUCTURE_MAX_ATTEMPTS + 1):
+            try:
+                self.ensure_compute_ready(replica)
+                return
+            except ComputeInfrastructureError as error:
+                if attempt == INSTANCE_INFRASTRUCTURE_MAX_ATTEMPTS:
+                    self.compute_infrastructure_failed(replica, attempt, error)
+                    raise
+                delay = float(2 ** (attempt - 1))
+                self.compute_infrastructure_retry(
+                    replica, attempt, INSTANCE_INFRASTRUCTURE_MAX_ATTEMPTS, delay, error
+                )
+                time.sleep(delay)
+                self.recover_instance_infrastructure(replica, error)
 
     def ensure_compute_ready(self, replica):
         if replica.warm_thread is not None:
@@ -1139,6 +1189,13 @@ class _RemoteEvaluationRuntime:
                 "Modal compute replica exited",
                 resource_id=resource_id,
             )
+        if self.resolved_region is not None:
+            try:
+                require_same_region(self.resolved_region, agent.region)
+            except InstanceInfrastructureError as exc:
+                raise ComputeInfrastructureError(
+                    str(exc), resource_id=getattr(agent.sandbox, "object_id", None)
+                ) from exc
 
     def recover_instance_infrastructure(
         self,
@@ -1220,6 +1277,8 @@ class _RemoteEvaluationRuntime:
         env_log_stop = threading.Event()
         env_log_thread = None
         try:
+            if not self.resolved_region:
+                raise InstanceInfrastructureError("run region has not been resolved")
             environment = _create_environment_sandbox(
                 self.environment_backend,
                 env_local_dir=env_dir,
@@ -1229,7 +1288,7 @@ class _RemoteEvaluationRuntime:
                 grace_sec=task.grace_sec,
                 generator_local=generator_local,
                 task_label=task.task_id,
-                region=self.region,
+                region=self.resolved_region,
                 sandbox_timeout_sec=max(
                     3600,
                     int(
@@ -1255,6 +1314,8 @@ class _RemoteEvaluationRuntime:
                 stop=env_log_stop,
             )
             wait_env_healthy(environment)
+            env_region = read_region(environment)
+            require_same_region(self.resolved_region, env_region)
         except BaseException:
             env_log_stop.set()
             if env_log_thread is not None:
@@ -1268,7 +1329,8 @@ class _RemoteEvaluationRuntime:
         boot_sec = round(time.monotonic() - started, 3)
         replica.progress["ready"] += 1
         replica.events.emit(
-            "env_ready", task_key=task_key, env_boot_sec=boot_sec
+            "env_ready", task_key=task_key, env_boot_sec=boot_sec,
+            env_region=env_region, resolved_region=self.resolved_region,
         )
         return {
             "task": task,
@@ -1277,6 +1339,7 @@ class _RemoteEvaluationRuntime:
             "task_dir": task_dir,
             "es": environment,
             "env_boot_sec": boot_sec,
+            "env_region": env_region,
             "env_log_stop": env_log_stop,
             "env_log_thread": env_log_thread,
         }
@@ -1407,6 +1470,7 @@ class _RemoteEvaluationRuntime:
         agent = replica.shared["sb"]
         meta: dict[str, Any] = {
             "requested_region": self.region,
+            "resolved_region": self.resolved_region,
             "placement": "shared-bounded",
             "parallel_evaluation": replica.index,
             "eval_algorithm": self.eval_algorithm,
@@ -1417,8 +1481,13 @@ class _RemoteEvaluationRuntime:
             "env_sandbox_id": getattr(environment.sandbox, "object_id", None),
             "agent_sandbox_id": getattr(agent.sandbox, "object_id", None),
             "agent_region": agent.region,
+            "env_region": prepared["env_region"],
         }
         try:
+            require_same_region(self.resolved_region, agent.region)
+            require_same_region(self.resolved_region, prepared["env_region"])
+            replica.events.emit("placement_verified", task_key=task_key,
+                                env_region=prepared["env_region"], agent_region=agent.region)
             control = GatewayControl(
                 environment.base_url, environment.control_token
             )

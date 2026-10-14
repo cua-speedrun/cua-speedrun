@@ -16,10 +16,13 @@ agent can send a planned batch in one round trip.
 from __future__ import annotations
 
 import base64
+import os
 import time
 from typing import Any
 
 import requests
+
+from cua_speedrun.fast_io import CONTENT_TYPE, decode_observation
 
 # Connection-level failures are retried a bounded number of times before
 # they surface, so a single tunnel blip does not kill the agent. What is
@@ -42,10 +45,19 @@ _CONNECT_RETRY_DELAY_SEC = 1.0
 
 
 class Computer:
-    def __init__(self, env_url: str, timeout_sec: float = 120.0):
+    def __init__(self, env_url: str, timeout_sec: float = 120.0, *, fast_io: bool | None = None):
         self.env_url = env_url.rstrip("/")
         self.timeout_sec = timeout_sec
         self._session = requests.Session()
+        self.fast_io = (
+            os.environ.get("GYM_ANYTHING_FAST_IO", "").strip().lower() in {"true", "1"}
+            if fast_io is None else fast_io
+        )
+        self.last_request_timing: dict[str, Any] | None = None
+        self._profile_transport = self.fast_io and os.environ.get(
+            "CS_FAST_IO_PROFILE", "false"
+        ).lower() in {"true", "1"}
+        self._last_socket = None
 
     def _request(
         self,
@@ -54,6 +66,28 @@ class Computer:
         retry_on: type[Exception] = requests.exceptions.ConnectionError,
         **kwargs: Any,
     ) -> requests.Response:
+        started = time.perf_counter()
+        profile: dict[str, Any] = {}
+
+        def received_headers(response, *args, **hook_kwargs):
+            # Requests dispatches this hook before consuming the response body.
+            headers_at = time.perf_counter()
+            profile["headers_ready_sec"] = headers_at - started
+            profile["requests_headers_sec"] = response.elapsed.total_seconds()
+            connection = getattr(response.raw, "_connection", None)
+            sock = getattr(connection, "sock", None)
+            if sock is not None:
+                try:
+                    signature = (id(sock), sock.getsockname(), sock.getpeername())
+                    profile["connection_reused"] = signature == self._last_socket
+                    self._last_socket = signature
+                except OSError:
+                    pass
+            profile["http_version"] = response.raw.version
+            profile["hook_sec"] = time.perf_counter() - headers_at
+
+        if self._profile_transport:
+            kwargs["hooks"] = {"response": received_headers}
         for attempt in range(_CONNECT_RETRIES + 1):
             try:
                 resp = self._session.request(
@@ -67,16 +101,69 @@ class Computer:
                     raise
                 time.sleep(_CONNECT_RETRY_DELAY_SEC * (attempt + 1))
                 continue
+            received_at = time.perf_counter()
             resp.raise_for_status()
+            if self.fast_io:
+                self.last_request_timing = {
+                    "operation": path,
+                    "round_trip_sec": received_at - started,
+                    "attempts": attempt + 1,
+                    "response_bytes": len(resp.content),
+                }
+                if profile:
+                    profile["body_receive_sec"] = (
+                        received_at - started - profile["headers_ready_sec"] - profile["hook_sec"]
+                    )
+                    self.last_request_timing["transport_profile"] = profile
             return resp
         raise AssertionError("unreachable")
 
     # -- core operations ---------------------------------------------------
 
     def observe(self) -> dict[str, Any]:
-        """Returns {"png": bytes, "meta": dict}."""
+        """Legacy PNG interface. Use observe_image for JPEG-aware fast I/O."""
         payload = self._request("GET", "observe").json()
         return {"png": base64.b64decode(payload["png_b64"]), "meta": payload["meta"]}
+
+    def observe_image(self) -> dict[str, Any]:
+        """Returns image bytes, their MIME type, and unchanged metadata."""
+        if self.fast_io:
+            return decode_observation(self.observe_wire())
+        payload = self.observe()
+        return {"image": payload["png"], "mime_type": "image/png", "meta": payload["meta"]}
+
+    def _observation_wire(self, method: str, path: str, **kwargs: Any) -> bytes:
+        response = self._request(
+            method, path, headers={"Accept": CONTENT_TYPE},
+            allow_redirects=False, **kwargs,
+        )
+        if 300 <= response.status_code < 400:
+            raise ValueError("gateway redirected an observation request; action was not replayed")
+        if response.headers.get("Content-Type") != CONTENT_TYPE:
+            raise ValueError("gateway does not support binary observations")
+        return response.content
+
+    def observe_wire(self) -> bytes:
+        """For pass-through proxies: no decoding or re-encoding of the body."""
+        return self._observation_wire("GET", "observe")
+
+    def step_observe_wire(self, actions: list[dict[str, Any]]) -> bytes:
+        # A lost response surfaces as an error. Never replay, fall back to
+        # another step, or report a later observation as the action's frame.
+        return self._observation_wire(
+            "POST", "step-observe", retry_on=requests.exceptions.ConnectTimeout,
+            json={"actions": actions},
+        )
+
+    def step_observe(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
+        """One request, one action batch, its screenshot, and backend metadata.
+
+        On an unknown action outcome, call observe separately; do not replay.
+        """
+        return decode_observation(self.step_observe_wire(actions))
+
+    def close(self) -> None:
+        self._session.close()
 
     def step(self, actions: list[dict[str, Any]]) -> dict[str, Any]:
         try:
